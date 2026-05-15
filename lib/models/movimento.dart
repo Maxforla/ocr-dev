@@ -16,6 +16,7 @@ class Movimento {
   final String searchCategoria;
   final String searchDescrizione;
   final String searchPuntoVendita;
+  final String searchMetodoPagamento;   // ⭐ NUOVO CAMPO
 
   final DateTime dataCreazione;
 
@@ -33,6 +34,7 @@ class Movimento {
     this.searchCategoria = "",
     this.searchDescrizione = "",
     this.searchPuntoVendita = "",
+    this.searchMetodoPagamento = "",     // ⭐ NUOVO CAMPO
     required this.dataCreazione,
   });
 
@@ -54,6 +56,7 @@ class Movimento {
       searchCategoria: map['searchCategoria'] ?? "",
       searchDescrizione: map['searchDescrizione'] ?? "",
       searchPuntoVendita: map['searchPuntoVendita'] ?? "",
+      searchMetodoPagamento: map['searchMetodoPagamento'] ?? "",   // ⭐ NUOVO CAMPO
       dataCreazione: map['dataCreazione'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['dataCreazione'])
           : DateTime.now(),
@@ -75,6 +78,7 @@ class Movimento {
       'searchCategoria': searchCategoria,
       'searchDescrizione': searchDescrizione,
       'searchPuntoVendita': searchPuntoVendita,
+      'searchMetodoPagamento': searchMetodoPagamento,   // ⭐ NUOVO CAMPO
       'dataCreazione': dataCreazione.millisecondsSinceEpoch,
     };
   }

@@ -92,7 +92,7 @@ String formatEuro(double value) {
 
     return openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -176,6 +176,19 @@ String formatEuro(double value) {
 
     if (oldVersion < 7) {
       await db.execute("ALTER TABLE movimenti ADD COLUMN dataCreazione INTEGER");
+    }
+    if (oldVersion < 9) {
+  // 1. Aggiunta nuova colonna searchMetodoPagamento
+  await db.execute("ALTER TABLE movimenti ADD COLUMN searchMetodoPagamento TEXT;");
+
+  // 2. Popolamento di tutti i campi search
+  await db.execute("""
+    UPDATE movimenti SET
+      searchCategoria = LOWER(categoria),
+      searchDescrizione = LOWER(descrizione),
+      searchPuntoVendita = LOWER(puntoVendita),
+      searchMetodoPagamento = LOWER(metodoPagamento)
+  """);
     }
   }
 
@@ -557,7 +570,7 @@ String formatEuro(double value) {
     map['searchCategoria'] = normalizeSearch(map['categoria']);
     map['searchDescrizione'] = normalizeSearch(map['descrizione']);
     map['searchPuntoVendita'] = normalizeSearch(map['puntoVendita']);
-
+    map['searchMetodoPagamento'] = normalizeSearch(map['metodoPagamento']); 
     return await db.insert(
       'movimenti',
       map,
@@ -582,7 +595,7 @@ String formatEuro(double value) {
     map['searchCategoria'] = normalizeSearch(map['categoria']);
     map['searchDescrizione'] = normalizeSearch(map['descrizione']);
     map['searchPuntoVendita'] = normalizeSearch(map['puntoVendita']);
-
+    map['searchMetodoPagamento'] = normalizeSearch(map['metodoPagamento']); 
     return await db.update(
       'movimenti',
       map,
@@ -599,6 +612,54 @@ String formatEuro(double value) {
       whereArgs: [id],
     );
   }
+  Future<List<Movimento>> searchMovimentiGoogle(String query) async {
+  final db = await database;
+
+  // 1. Normalizza la query
+  final cleaned = normalizeSearch(query);
+
+  if (cleaned.isEmpty) {
+    return getMovimenti(); // se vuoto → ritorna tutto
+  }
+
+  // 2. Tokenizza (es: "conad bancomat" → ["conad", "bancomat"])
+  final tokens = cleaned.split(" ");
+
+  // 3. Costruzione dinamica della WHERE
+  final whereClauses = <String>[];
+  final whereArgs = <String>[];
+
+  for (final token in tokens) {
+    whereClauses.add("""
+      (
+        searchCategoria LIKE ? OR
+        searchDescrizione LIKE ? OR
+        searchPuntoVendita LIKE ? OR
+        searchMetodoPagamento LIKE ?
+      )
+    """);
+
+    whereArgs.addAll([
+      "%$token%",
+      "%$token%",
+      "%$token%",
+      "%$token%",
+    ]);
+  }
+
+  final whereString = whereClauses.join(" AND ");
+
+  // 4. Esecuzione query
+  final res = await db.query(
+    'movimenti',
+    where: whereString,
+    whereArgs: whereArgs,
+    orderBy: 'data DESC',
+  );
+
+  return res.map((e) => Movimento.fromMap(e)).toList();
+}
+
 
   /* ============================
      PREDITTIVI

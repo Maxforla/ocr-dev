@@ -8,13 +8,13 @@ import '../services/ocr_flow.dart';
 import 'nuovo_movimento_page.dart';
 import '../utils/normalize_smart.dart';
 import 'package:spese_app/utils/format_euro.dart';
-
+import 'dart:async';
 
 class MovimentiPage extends StatefulWidget {
   const MovimentiPage({super.key});
 
   @override
-  State<MovimentiPage> createState() => _MovimentiPageState();
+  _MovimentiPageState createState() => _MovimentiPageState();
 }
 
 class _MovimentiPageState extends State<MovimentiPage> {
@@ -24,17 +24,20 @@ class _MovimentiPageState extends State<MovimentiPage> {
   String filtro = "tutti";
   String query = "";
   String meseSelezionato = "Riepilogo generale";
-
-  // FORMATTAZIONE NUMERI
-
   // RICERCA
   final TextEditingController _searchController = TextEditingController();
+
+  // ⭐⭐⭐ VARIABILI DI STATO PER LA RICERCA "ALLA GOOGLE" ⭐⭐⭐
+  Timer? _debounce;
+  List<Movimento> _risultati = [];
+  String _query = "";
 
   @override
   void initState() {
     super.initState();
     _caricaMovimenti();
   }
+
 
   @override
   void dispose() {
@@ -43,15 +46,40 @@ class _MovimentiPageState extends State<MovimentiPage> {
   }
 
   Future<void> _caricaMovimenti() async {
-    final lista = await DatabaseHelper.instance.getMovimenti();
+  final lista = await DatabaseHelper.instance.getMovimenti();
 
-    // 🔥 Ordina per data decrescente (più recenti in alto)
-   lista.sort((a, b) => b.data.compareTo(a.data));
+  // 🔥 Ordina per data decrescente (più recenti in alto)
+  lista.sort((a, b) => b.data.compareTo(a.data));
+
+  setState(() {
+    movimenti = lista;
+    _risultati = lista;   // ⭐ inizializza anche la lista visibile
+  });
+}
+
+// ⭐⭐⭐ INCOLLA QUI LA FUNZIONE DI RICERCA ⭐⭐⭐
+
+void _onSearchChanged(String value) {
+  _query = value;
+
+  // Cancella eventuale timer precedente
+  _debounce?.cancel();
+
+  // Avvia un nuovo debounce
+  _debounce = Timer(const Duration(milliseconds: 300), () async {
+    if (_query.trim().isEmpty) {
+      // Se la query è vuota → ricarica tutti i movimenti
+      _risultati = await DatabaseHelper.instance.getMovimenti();
+    } else {
+      // Altrimenti → ricerca alla Google
+      _risultati = await DatabaseHelper.instance.searchMovimentiGoogle(_query);
+    }
+
+    setState(() {});
+  });
+}
 
 
-
-    setState(() => movimenti = lista);
-  }
 
   Future<void> _scanReceipt() async {
     try {
@@ -700,7 +728,7 @@ class _MovimentiPageState extends State<MovimentiPage> {
 
   // FILTRAGGIO MOVIMENTI
   List<Movimento> _filtraMovimenti() {
-    List<Movimento> lista = [...movimenti];
+    List<Movimento> lista = [..._risultati];
 
     if (meseSelezionato != "Riepilogo generale") {
       lista = lista.where((m) {
@@ -715,19 +743,6 @@ class _MovimentiPageState extends State<MovimentiPage> {
       lista = lista.where((m) => m.tipo == MovimentoTipo.uscita).toList();
     }
 
-    if (query.isNotEmpty) {
-      String q = query
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^\w\s]'), '')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
-
-      lista = lista.where((m) {
-        return m.searchCategoria.contains(q) ||
-               m.searchDescrizione.contains(q) ||
-               m.searchPuntoVendita.contains(q);
-      }).toList();
-    }
 // 🔥 Ordina per data decrescente
   lista.sort((a, b) => b.data.compareTo(a.data));
 
@@ -737,8 +752,9 @@ class _MovimentiPageState extends State<MovimentiPage> {
   // BUILD
   @override
   Widget build(BuildContext context) {
-    final mappaMesi = _raggruppaPerMese(movimenti);
     final listaFiltrata = _filtraMovimenti();
+    final mappaMesi = _raggruppaPerMese(listaFiltrata);
+
 
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
@@ -757,7 +773,7 @@ class _MovimentiPageState extends State<MovimentiPage> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: TextField(
               controller: _searchController,
-              onChanged: (v) => setState(() => query = v),
+              onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: "Cerca per categoria, descrizione o negozio...",
                 prefixIcon: const Icon(Icons.search),
@@ -787,7 +803,7 @@ class _MovimentiPageState extends State<MovimentiPage> {
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _riepilogoMensile(movimenti, meseSelezionato),
+            child: _riepilogoMensile(listaFiltrata, meseSelezionato),
           ),
           Expanded(
             child: listaFiltrata.isEmpty

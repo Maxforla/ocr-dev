@@ -167,7 +167,7 @@ class _HomePageState extends State<HomePage> {
                 _menuButton("Movimenti", Icons.list, () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const MovimentiPage()),
+                    MaterialPageRoute(builder: (_) => MovimentiPage()),
                   );
                   await _caricaMovimenti();
                 }),
