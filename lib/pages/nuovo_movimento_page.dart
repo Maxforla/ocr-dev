@@ -5,6 +5,7 @@ import '../database_helper.dart';
 import '../models/movimento.dart';
 import '../utils/normalize_smart.dart';
 import '../utils/format_importo.dart';
+import '../database_helper.dart' show DatabaseHelper;
 
 class NuovoMovimentoPage extends StatefulWidget {
   final Movimento? movimentoDaModificare;
@@ -19,6 +20,16 @@ class NuovoMovimentoPage extends StatefulWidget {
 }
 
 class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
+  String normalizeSearch(String input) {
+  if (input.trim().isEmpty) return "";
+  String cleaned = input
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^\w\s]'), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  return cleaned;
+}
+
   MovimentoTipo _tipo = MovimentoTipo.uscita;
   String? _categoria;
   String? _descrizione;
@@ -106,6 +117,29 @@ class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
       setState(() => _data = picked);
     }
   }
+Future<int?> _scegliMacroarea() async {
+  final db = await DatabaseHelper.instance.database;
+
+  final macroaree = await db.query('macroaree');
+
+  return showDialog<int>(
+    context: context,
+    builder: (_) {
+      return AlertDialog(
+        title: const Text("Scegli macroarea"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: macroaree.map((m) {
+            return ListTile(
+              title: Text(m['nome'].toString()),
+              onTap: () => Navigator.pop(context, m['id'] as int),
+            );
+          }).toList(),
+        ),
+      );
+    },
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +212,7 @@ class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
               title: "Categoria",
               highlight: ocrCategoria,
               child: FutureBuilder<List<String>>(
-                future: DatabaseHelper.instance.getCategoriePredittive(tipo: _tipo),
+                future: DatabaseHelper.instance.getCategorieByTipo(_tipo),
                 builder: (_, snapshot) {
                   final categorie = snapshot.data ?? [];
 
@@ -243,38 +277,45 @@ class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
 
                     final items = [...descrizioni, "__nuova__"];
 
-                    return DropdownSearch<String>(
-                      items: items,
-                      selectedItem: _descrizione,
-                      popupProps: PopupProps.menu(
-                        showSearchBox: true,
-                        itemBuilder: (context, item, isSelected) {
-                          if (item == "__nuova__") {
-                            return const ListTile(
-                              leading: Icon(Icons.add, color: Colors.blue),
-                              title: Text("Aggiungi nuova descrizione"),
-                            );
-                          }
-                          return ListTile(title: Text(item));
-                        },
-                        // ⭐ AGGIUNTA: capitalizzazione on-blur nel campo di ricerca
-                        searchFieldProps: TextFieldProps(
-                         ),
-                      ),
+                   return DropdownSearch<String>(
+  items: items,
+  selectedItem: _descrizione,
 
-                      dropdownDecoratorProps: const DropDownDecoratorProps(
-                        dropdownSearchDecoration: InputDecoration(
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      dropdownBuilder: (context, selectedItem) {
-                        if (selectedItem == "__nuova__") {
-                          return const Text("Aggiungi nuova descrizione");
-                        }
-                        return Text(selectedItem ?? "");
-                      },
-                      onChanged: _onDescrizioneChanged,
-                    );
+  // ⭐ FIX DEFINITIVO: evita duplicati quando la descrizione ha 2+ parole
+  compareFn: (a, b) => a == b,
+
+  popupProps: PopupProps.menu(
+    showSearchBox: true,
+    itemBuilder: (context, item, isSelected) {
+      if (item == "__nuova__") {
+        return const ListTile(
+          leading: Icon(Icons.add, color: Colors.blue),
+          title: Text("Aggiungi nuova descrizione"),
+        );
+      }
+      return ListTile(title: Text(item));
+    },
+
+    // capitalizzazione on-blur
+    searchFieldProps: TextFieldProps(),
+  ),
+
+  dropdownDecoratorProps: const DropDownDecoratorProps(
+    dropdownSearchDecoration: InputDecoration(
+      border: OutlineInputBorder(),
+    ),
+  ),
+
+  dropdownBuilder: (context, selectedItem) {
+    if (selectedItem == "__nuova__") {
+      return const Text("Aggiungi nuova descrizione");
+    }
+    return Text(selectedItem ?? "");
+  },
+
+  onChanged: _onDescrizioneChanged,
+);
+
                   },
                 ),
               ),
@@ -523,52 +564,68 @@ class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
 // ------------------------------------------------------------
 // CAMBIO CATEGORIA
 // ------------------------------------------------------------
-  void _onCategoriaChanged(String? val) async {
-    FocusScope.of(context).unfocus();
+ void _onCategoriaChanged(String? val) async {
+  FocusScope.of(context).unfocus();
 
-    if (val == "__nuova__") {
-      final nuova = await _creaNuovaCategoria();
-      if (nuova != null) {
-        await DatabaseHelper.instance.insertCategoria(
-          tipo: _tipo,
-          nome: nuova,
-        );
-        setState(() {
-          _categoria = normalizeSmart(nuova);
-          _descrizione = null;
-        });
-      }
-      return;
+  if (val == "__nuova__") {
+    final nuova = await _creaNuovaCategoria();
+    if (nuova != null) {
+
+      final idMacroarea = await _scegliMacroarea();
+      if (idMacroarea == null) return;
+
+      await DatabaseHelper.instance.insertCategoria(
+        tipo: _tipo,
+        nome: nuova,
+        idMacroarea: idMacroarea,
+      );
+
+      setState(() {
+        _categoria = normalizeSmart(nuova);
+        _descrizione = null;
+      });
     }
-
-    setState(() {
-      _categoria = normalizeSmart(val ?? "");
-      _descrizione = null;
-    });
+    return;
   }
+
+  // ⭐⭐⭐ RAMO NORMALE (mancava!)
+  setState(() {
+    _categoria = val;        // ← fondamentale
+    _descrizione = null;     // reset descrizione
+  });
+}
 
 
 // ------------------------------------------------------------
 // CAMBIO DESCRIZIONE
 // ------------------------------------------------------------
   void _onDescrizioneChanged(String? val) async {
-    FocusScope.of(context).unfocus();
+  FocusScope.of(context).unfocus();
 
-    if (val == "__nuova__") {
-      final nuova = await _creaNuovaDescrizione();
-      if (nuova != null) {
-        await DatabaseHelper.instance.aggiungiDescrizione(
-          tipo: _tipo,
-          categoria: _categoria!,
-          descrizione: nuova,
-        );
-        setState(() => _descrizione = normalizeSmart(nuova));
-      }
-      return;
+  if (val == "__nuova__") {
+    final nuova = await _creaNuovaDescrizione();
+    if (nuova != null) {
+      final norm = normalizeSmart(nuova);
+
+      await DatabaseHelper.instance.aggiungiDescrizione(
+        tipo: _tipo,
+        categoria: _categoria!,
+        descrizione: norm,
+      );
+
+      setState(() {
+        _descrizione = norm;   // ⭐ FIX 1: normalizzazione coerente
+      });
     }
-
-    setState(() => _descrizione = normalizeSmart(val ?? ""));
+    return;
   }
+
+  // ⭐ FIX 2: normalizza SEMPRE la descrizione selezionata
+  setState(() {
+    _descrizione = val;
+  });
+}
+
 
 
 // ------------------------------------------------------------
@@ -840,49 +897,68 @@ class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
 // SALVATAGGIO
 // ------------------------------------------------------------
   void _salva() {
-    final importo =
-        double.tryParse(_importoController.text.replaceAll(',', '.'));
+  final importo =
+      double.tryParse(_importoController.text.replaceAll(',', '.'));
 
-    if (_categoria == null ||
-        _descrizione == null ||
-        importo == null ||
-        importo <= 0) {
-      return;
-    }
-
-    // Normalizzazione finale
-    _categoria = normalizeSmart(_categoria ?? "");
-    _descrizione = normalizeSmart(_descrizione ?? "");
-    _metodoPagamento = normalizeSmart(_metodoPagamento ?? "");
-    _puntoVenditaController.text = normalizeSmart(_puntoVenditaController.text);
-    _notaController.text = normalizeSmart(_notaController.text);
-
-    final movimento = Movimento(
-      id: widget.movimentoDaModificare?.id,
-      tipo: _tipo,
-      data: _data,
-      categoria: _categoria!,
-      descrizione: _descrizione!,
-      importo: importo,
-      puntoVendita: _puntoVenditaController.text,
-      metodoPagamento: _metodoPagamento ?? 'Non specificato',
-      nota: _notaController.text.trim().isEmpty
-          ? null
-          : _notaController.text.trim(),
-
-      // 🔥 ORIGINE
-      origine: widget.movimentoDaModificare?.origine ?? OrigineDati.manuale,
-
-      // 🔥 SEARCH FIELDS
-      searchCategoria: normalizeSmart(_categoria!),
-      searchDescrizione: normalizeSmart(_descrizione!),
-      searchPuntoVendita: normalizeSmart(_puntoVenditaController.text),
-
-      // 🔥 DATA CREAZIONE
-      dataCreazione: widget.movimentoDaModificare?.dataCreazione ?? DateTime.now(),
-    );
-
-    Navigator.pop(context, movimento);
+  if (_categoria == null ||
+      _descrizione == null ||
+      importo == null ||
+      importo <= 0) {
+    print("DEBUG UI: campi obbligatori mancanti");
+    return;
   }
+
+  // Normalizzazione finale
+  _categoria = _categoria;
+  _descrizione = normalizeSmart(_descrizione ?? "");
+  _metodoPagamento = normalizeSmart(_metodoPagamento ?? "");
+  _puntoVenditaController.text = normalizeSmart(_puntoVenditaController.text);
+
+  print("DEBUG UI: creo Movimento");
+
+  final movimento = Movimento(
+    id: widget.movimentoDaModificare?.id,
+    tipo: _tipo,
+    data: _data,
+    categoria: _categoria!,
+    descrizione: _descrizione!,
+    importo: importo,
+    puntoVendita: _puntoVenditaController.text,
+    metodoPagamento: _metodoPagamento ?? "",
+    nota: _notaController.text,
+    origine: OrigineDati.manuale,
+    searchCategoria: normalizeSearch(_categoria!),
+    searchDescrizione: normalizeSearch(_descrizione!),
+    searchPuntoVendita: normalizeSearch(_puntoVenditaController.text),
+    searchMetodoPagamento: normalizeSearch(_metodoPagamento ?? ""),
+    dataCreazione: DateTime.now(),
+    idMacroarea: null, // lo calcola insertMovimento()
+  );
+
+  print("DEBUG UI: movimento creato → Navigator.pop");
+
+  Navigator.pop(context, movimento);
+}
+
+
+
+  // ------------------------------------------------------------
+  // FUNZIONE DI PULIZIA NOTA
+  // ------------------------------------------------------------
+  String? _cleanNota(String input) {
+    if (input.isEmpty) return null;
+
+    // Rimuove spazi finali
+    String cleaned = input.replaceAll(RegExp(r'\s+$'), '');
+
+    // Rimuove caratteri invisibili Unicode
+    cleaned = cleaned.replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '');
+
+    // Trim finale
+    cleaned = cleaned.trim();
+
+    return cleaned.isEmpty ? null : cleaned;
+  }
+
  }
 

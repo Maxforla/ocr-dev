@@ -1,21 +1,15 @@
 // lib/main.dart
 
 import 'package:flutter/material.dart';
-
+import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 import 'vocabolari.dart';
 import 'pages/home_page.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Inizializza il DB e seed iniziali
-  //await DatabaseHelper.instance.seedDatiIniziali(
-   // vocabUscite: vocabUscite,
-   // vocabEntrate: vocabEntrate,
-  //   metodiPagamentoBase: metodiPagamentoBase,
-  //);
-
   runApp(const MyApp());
 }
 

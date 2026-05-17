@@ -33,21 +33,31 @@ class OcrFlow {
 
       // 5) Movimento precompilato
       final nuovoMovimento = Movimento(
-        id: null,
-        tipo: MovimentoTipo.uscita,
-        data: parsed.data ?? DateTime.now(),
-        categoria: parsed.categoria ?? "Da scontrino",
-        descrizione: parsed.descrizione ?? "Spesa rilevata da OCR",
-        importo: parsed.importo ?? 0.0,
-        puntoVendita: parsed.puntoVendita ?? "",
-        metodoPagamento: parsed.metodoPagamento ?? "",
-        nota: notaPulita,
-        origine: OrigineDati.ocr,
-        searchCategoria: normalizeSmart(parsed.categoria ?? "Da scontrino"),
-        searchDescrizione: normalizeSmart(parsed.descrizione ?? "Spesa rilevata da OCR"),
-        searchPuntoVendita: normalizeSmart(parsed.puntoVendita ?? ""),
-        dataCreazione: DateTime.now(),
-      );
+  id: null,
+  tipo: MovimentoTipo.uscita,
+
+  // 🔥 DATA (convertita correttamente)
+  data: (parsed.data ?? DateTime.now()),
+
+  categoria: parsed.categoria ?? "Da scontrino",
+  descrizione: parsed.descrizione ?? "Spesa rilevata da OCR",
+  importo: parsed.importo ?? 0.0,
+  puntoVendita: parsed.puntoVendita ?? "",
+  metodoPagamento: parsed.metodoPagamento ?? "",
+  nota: notaPulita,
+  idMacroarea: 0,
+
+  origine: OrigineDati.ocr,
+
+  // 🔥 SEARCH FIELDS
+  searchCategoria: normalizeSmart(parsed.categoria ?? "Da scontrino"),
+  searchDescrizione: normalizeSmart(parsed.descrizione ?? "Spesa rilevata da OCR"),
+  searchPuntoVendita: normalizeSmart(parsed.puntoVendita ?? ""),
+  searchMetodoPagamento: normalizeSmart(parsed.metodoPagamento ?? ""),
+
+  // 🔥 DATA CREAZIONE (DateTime, verrà convertita da toMap)
+  dataCreazione: DateTime.now(),
+);
 
 
       // 6) Se completo → salva subito
@@ -82,11 +92,17 @@ class OcrFlow {
 
       return null;
 
-    } catch (e) {
+            } catch (e, stack) {
+      // LOG COMPLETO DELL'ERRORE
+      // ignore: avoid_print
+      print('OCR ERROR: $e');
+      // ignore: avoid_print
+      print('OCR STACK: $stack');
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Errore durante la scansione OCR")),
       );
       return null;
     }
   }
-  }
+}

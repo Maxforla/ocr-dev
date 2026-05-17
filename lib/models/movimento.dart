@@ -16,9 +16,11 @@ class Movimento {
   final String searchCategoria;
   final String searchDescrizione;
   final String searchPuntoVendita;
-  final String searchMetodoPagamento;   // ⭐ NUOVO CAMPO
+  final String searchMetodoPagamento;
 
   final DateTime dataCreazione;
+
+  final int? idMacroarea; // opzionale, lo calcola il DB
 
   Movimento({
     this.id,
@@ -34,15 +36,16 @@ class Movimento {
     this.searchCategoria = "",
     this.searchDescrizione = "",
     this.searchPuntoVendita = "",
-    this.searchMetodoPagamento = "",     // ⭐ NUOVO CAMPO
+    this.searchMetodoPagamento = "",
     required this.dataCreazione,
+    this.idMacroarea,
   });
 
   factory Movimento.fromMap(Map<String, dynamic> map) {
     return Movimento(
       id: map['id'] as int?,
       tipo: MovimentoTipo.values.firstWhere((e) => e.name == map['tipo']),
-      data: DateTime.fromMillisecondsSinceEpoch(map['data']),
+      data: DateTime.parse(map['data']),
       categoria: map['categoria'] ?? "",
       descrizione: map['descrizione'] ?? "",
       importo: (map['importo'] as num).toDouble(),
@@ -56,10 +59,33 @@ class Movimento {
       searchCategoria: map['searchCategoria'] ?? "",
       searchDescrizione: map['searchDescrizione'] ?? "",
       searchPuntoVendita: map['searchPuntoVendita'] ?? "",
-      searchMetodoPagamento: map['searchMetodoPagamento'] ?? "",   // ⭐ NUOVO CAMPO
-      dataCreazione: map['dataCreazione'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['dataCreazione'])
-          : DateTime.now(),
+      searchMetodoPagamento: map['searchMetodoPagamento'] ?? "",
+
+      // gestione robusta di dataCreazione
+      dataCreazione: (() {
+  final v = map['dataCreazione'];
+
+  if (v == null) return DateTime.now();
+
+  // Caso 1: timestamp (INTEGER)
+  if (v is int) {
+    return DateTime.fromMillisecondsSinceEpoch(v);
+  }
+
+  // Caso 2: stringa ISO
+  if (v is String) {
+    try {
+      return DateTime.parse(v);
+    } catch (_) {
+      return DateTime.now();
+    }
+  }
+
+  return DateTime.now();
+})(),
+
+
+      idMacroarea: map['idMacroarea'], // letto dal DB
     );
   }
 
@@ -67,7 +93,7 @@ class Movimento {
     return {
       'id': id,
       'tipo': tipo.name,
-      'data': data.millisecondsSinceEpoch,
+      'data': data.toIso8601String(),
       'categoria': categoria,
       'descrizione': descrizione,
       'importo': importo,
@@ -78,8 +104,9 @@ class Movimento {
       'searchCategoria': searchCategoria,
       'searchDescrizione': searchDescrizione,
       'searchPuntoVendita': searchPuntoVendita,
-      'searchMetodoPagamento': searchMetodoPagamento,   // ⭐ NUOVO CAMPO
-      'dataCreazione': dataCreazione.millisecondsSinceEpoch,
+      'searchMetodoPagamento': searchMetodoPagamento,
+      'dataCreazione': dataCreazione.toIso8601String(),
+      // idMacroarea NON viene messo qui → lo calcola insertMovimento()
     };
   }
 }

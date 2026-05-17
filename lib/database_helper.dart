@@ -9,6 +9,39 @@ class DatabaseHelper {
   static Database? _db;
 
   DatabaseHelper._();
+Future<void> deleteAllMovimenti() async {
+  final db = await database;
+  await db.delete('movimenti');
+  print("DEBUG DB: tutti i movimenti cancellati");
+}
+Future<void> pulisciDuplicati({
+  required String tabella,
+  required String campo,
+}) async {
+  final db = await database;
+
+  final rows = await db.query(tabella);
+
+  final Map<String, int> canonical = {};
+
+  for (final row in rows) {
+    final id = row['id'] as int;
+    final valore = row[campo] as String;
+
+    final norm = normalizeSmart(valore);
+
+    if (!canonical.containsKey(norm)) {
+      canonical[norm] = id; // tieni la prima voce
+    } else {
+      await db.delete(
+        tabella,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      print("DEBUG CLEAN: eliminato duplicato in $tabella → $valore");
+    }
+  }
+}
 
   // -------------------------------------------------------------
   // INIZIO PATCH — FUNZIONI DI NORMALIZZAZIONE E FORMATTAZIONE
@@ -58,8 +91,6 @@ String formatEuro(double value) {
   return formatter.format(value).trim();
 }
 
-
-
   /// Parsing robusto:
   /// accetta "12,50", "12.50", "1.234,56", "1234.56"
   double parseEuroToDouble(String input) {
@@ -87,46 +118,67 @@ String formatEuro(double value) {
   }
 
   Future<Database> _initDb() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final path = p.join(dir.path, 'spese.db');
+  final dir = await getApplicationDocumentsDirectory();
+  final path = p.join(dir.path, 'spese.db');
 
-    return openDatabase(
-      path,
-      version: 9,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
-  }
+  final db = await openDatabase(
+    path,
+    version: 12,
+    onCreate: _onCreate,
+    onUpgrade: _onUpgrade,
+  );
+
+  print(await db.rawQuery('SELECT * FROM macroaree'));
+
+  return db;
+}
+
   /* ============================
      ON CREATE
      ============================ */
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
-      CREATE TABLE movimenti (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tipo TEXT,
-        data INTEGER,
-        categoria TEXT,
-        descrizione TEXT,
-        importo REAL,
-        puntoVendita TEXT,
-        metodoPagamento TEXT,
-        nota TEXT,
-        origine TEXT,
-        searchCategoria TEXT,
-        searchDescrizione TEXT,
-        searchPuntoVendita TEXT,
-        dataCreazione INTEGER
-      );
-    ''');
+  CREATE TABLE movimenti (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data TEXT NOT NULL,
+  tipo TEXT NOT NULL,
+  categoria TEXT NOT NULL,
+  descrizione TEXT NOT NULL,
+  importo REAL NOT NULL,
+  puntoVendita TEXT,
+  metodoPagamento TEXT,
+  nota TEXT,
+  origine TEXT,
+  searchCategoria TEXT,
+  searchDescrizione TEXT,
+  searchPuntoVendita TEXT,
+  searchMetodoPagamento TEXT,
+  dataCreazione TEXT,
+  idMacroarea INTEGER NOT NULL,
+  FOREIGN KEY(idMacroarea) REFERENCES macroaree(id)
+);
+  ''');
+
+
+
+await db.execute('''
+  CREATE TABLE macroaree (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL UNIQUE,
+    percentuale INTEGER NOT NULL
+  );
+''');
 
     await db.execute('''
-      CREATE TABLE categorie (
-        nome TEXT,
-        tipo TEXT,
-        PRIMARY KEY (nome, tipo)
-      );
-    ''');
+  CREATE TABLE categorie (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    tipo TEXT NOT NULL,
+    idMacroarea INTEGER NOT NULL,
+    FOREIGN KEY(idMacroarea) REFERENCES macroaree(id),
+    UNIQUE(nome, tipo)
+  );
+''');
 
     await db.execute('''
       CREATE TABLE descrizioni (
@@ -190,47 +242,186 @@ String formatEuro(double value) {
       searchMetodoPagamento = LOWER(metodoPagamento)
   """);
     }
+   // ⭐ NUOVA MIGRAZIONE: conversione timestamp → ISO
+  if (oldVersion < 11) {
+    await db.rawQuery('''
+      UPDATE movimenti
+      SET data = datetime(data / 1000, 'unixepoch')
+      WHERE typeof(data) = 'integer';
+    ''');
   }
+}
 
 
   /* ============================
      SEED
      ============================ */
   Future<void> seedDatabase(Database db) async {
-    final countCat = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM categorie'),
+   // SEED MACROAREE 50-30-20
+final countMacro = Sqflite.firstIntValue(
+  await db.rawQuery('SELECT COUNT(*) FROM macroaree'),
+);
+
+if (countMacro == 0) {
+  await db.insert('macroaree', {
+    'nome': 'Necessità',
+    'percentuale': 50,
+  });
+
+  await db.insert('macroaree', {
+    'nome': 'Desideri',
+    'percentuale': 30,
+  });
+
+  await db.insert('macroaree', {
+    'nome': 'Risparmio',
+    'percentuale': 20,
+  });
+}
+
+// SEED CATEGORIE COLLEGATE ALLE MACROAREE
+final countCat = Sqflite.firstIntValue(
+  await db.rawQuery('SELECT COUNT(*) FROM categorie'),
+);
+
+if (countCat == 0) {
+  // Helper per ottenere idMacroarea
+  Future<int> getIdMacroarea(String nome) async {
+    final res = await db.query(
+      'macroaree',
+      where: 'nome = ?',
+      whereArgs: [nome],
+      limit: 1,
     );
+    return res.first['id'] as int;
+  }
 
-    if (countCat == 0) {
-      final categorie = [
-        {'nome': 'Casa', 'tipo': 'uscita'},
-        {'nome': 'Alimentazione', 'tipo': 'uscita'},
-        {'nome': 'Trasporti', 'tipo': 'uscita'},
-        {'nome': 'Stipendio', 'tipo': 'entrata'},
-        {'nome': 'Vendite', 'tipo': 'entrata'},
-      ];
+  final idNecessita = await getIdMacroarea('Necessità');
+  final idDesideri = await getIdMacroarea('Desideri');
+  final idRisparmio = await getIdMacroarea('Risparmio');
 
-      for (final c in categorie) {
-        await db.insert('categorie', c);
-      }
-    }
+  final categorie = [
+    // NECESSITÀ (50%)
+    {'nome': 'Affitto',        'tipo': 'uscita', 'idMacroarea': idNecessita},
+    {'nome': 'Mutuo',          'tipo': 'uscita', 'idMacroarea': idNecessita},
+    {'nome': 'Utenze',         'tipo': 'uscita', 'idMacroarea': idNecessita},
+    {'nome': 'Alimentari',     'tipo': 'uscita', 'idMacroarea': idNecessita},
+    {'nome': 'Trasporti',      'tipo': 'uscita', 'idMacroarea': idNecessita},
+    {'nome': 'Assicurazioni',  'tipo': 'uscita', 'idMacroarea': idNecessita},
+    {'nome': 'Altro',          'tipo': 'uscita', 'idMacroarea': idNecessita},
+
+    // DESIDERI (30%)
+    {'nome': 'Ristoranti',     'tipo': 'uscita', 'idMacroarea': idDesideri},
+    {'nome': 'Shopping',       'tipo': 'uscita', 'idMacroarea': idDesideri},
+    {'nome': 'Viaggi',         'tipo': 'uscita', 'idMacroarea': idDesideri},
+    {'nome': 'Intrattenimento','tipo': 'uscita', 'idMacroarea': idDesideri},
+    {'nome': 'Hobby',          'tipo': 'uscita', 'idMacroarea': idDesideri},
+
+    // RISPARMIO (20%)
+    {'nome': 'Risparmio',      'tipo': 'uscita', 'idMacroarea': idRisparmio},
+    {'nome': 'Investimenti',   'tipo': 'uscita', 'idMacroarea': idRisparmio},
+    {'nome': 'Fondo emergenza','tipo': 'uscita', 'idMacroarea': idRisparmio},
+    {'nome': 'Prestiti',       'tipo': 'uscita', 'idMacroarea': idRisparmio},
+
+    // ENTRATE
+    {'nome': 'Stipendio',      'tipo': 'entrata', 'idMacroarea': idNecessita},
+    {'nome': 'Entrate extra',  'tipo': 'entrata', 'idMacroarea': idDesideri},
+  ];
+
+  for (final c in categorie) {
+    await db.insert('categorie', c, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+}
+
 
     final countDesc = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM descrizioni'),
-    );
+  await db.rawQuery('SELECT COUNT(*) FROM descrizioni'),
+);
 
-    if (countDesc == 0) {
-      final descrizioni = [
-        {'tipo': 'uscita', 'categoria': 'Casa', 'descrizione': 'Affitto'},
-        {'tipo': 'uscita', 'categoria': 'Casa', 'descrizione': 'Luce'},
-        {'tipo': 'uscita', 'categoria': 'Alimentazione', 'descrizione': 'Spesa'},
-        {'tipo': 'entrata', 'categoria': 'Stipendio', 'descrizione': 'Mensile'},
-      ];
+if (countDesc == 0) {
+  final descrizioni = [
+    // AFFITTO
+    {'tipo': 'uscita', 'categoria': 'Affitto', 'descrizione': 'Canone mensile'},
+    {'tipo': 'uscita', 'categoria': 'Affitto', 'descrizione': 'Condominio'},
 
-      for (final d in descrizioni) {
-        await db.insert('descrizioni', d);
-      }
-    }
+    // MUTUO
+    {'tipo': 'uscita', 'categoria': 'Mutuo', 'descrizione': 'Rata mensile'},
+    {'tipo': 'uscita', 'categoria': 'Mutuo', 'descrizione': 'Interessi'},
+
+    // UTENZE
+    {'tipo': 'uscita', 'categoria': 'Utenze', 'descrizione': 'Luce'},
+    {'tipo': 'uscita', 'categoria': 'Utenze', 'descrizione': 'Gas'},
+    {'tipo': 'uscita', 'categoria': 'Utenze', 'descrizione': 'Acqua'},
+    {'tipo': 'uscita', 'categoria': 'Utenze', 'descrizione': 'Internet'},
+
+    // ALIMENTARI
+    {'tipo': 'uscita', 'categoria': 'Alimentari', 'descrizione': 'Spesa settimanale'},
+    {'tipo': 'uscita', 'categoria': 'Alimentari', 'descrizione': 'Supermercato'},
+    {'tipo': 'uscita', 'categoria': 'Alimentari', 'descrizione': 'Prodotti freschi'},
+
+    // TRASPORTI
+    {'tipo': 'uscita', 'categoria': 'Trasporti', 'descrizione': 'Carburante'},
+    {'tipo': 'uscita', 'categoria': 'Trasporti', 'descrizione': 'Manutenzione auto'},
+    {'tipo': 'uscita', 'categoria': 'Trasporti', 'descrizione': 'Assicurazione auto'},
+    {'tipo': 'uscita', 'categoria': 'Trasporti', 'descrizione': 'Mezzi pubblici'},
+
+    // ASSICURAZIONI
+    {'tipo': 'uscita', 'categoria': 'Assicurazioni', 'descrizione': 'Polizza casa'},
+    {'tipo': 'uscita', 'categoria': 'Assicurazioni', 'descrizione': 'Polizza vita'},
+    {'tipo': 'uscita', 'categoria': 'Assicurazioni', 'descrizione': 'Polizza sanitaria'},
+
+    // RISTORANTI
+    {'tipo': 'uscita', 'categoria': 'Ristoranti', 'descrizione': 'Cena fuori'},
+    {'tipo': 'uscita', 'categoria': 'Ristoranti', 'descrizione': 'Pranzo veloce'},
+    {'tipo': 'uscita', 'categoria': 'Ristoranti', 'descrizione': 'Aperitivo'},
+
+    // SHOPPING
+    {'tipo': 'uscita', 'categoria': 'Shopping', 'descrizione': 'Abbigliamento'},
+    {'tipo': 'uscita', 'categoria': 'Shopping', 'descrizione': 'Scarpe'},
+    {'tipo': 'uscita', 'categoria': 'Shopping', 'descrizione': 'Accessori'},
+
+    // VIAGGI
+    {'tipo': 'uscita', 'categoria': 'Viaggi', 'descrizione': 'Hotel'},
+    {'tipo': 'uscita', 'categoria': 'Viaggi', 'descrizione': 'Volo'},
+    {'tipo': 'uscita', 'categoria': 'Viaggi', 'descrizione': 'Noleggio auto'},
+
+    // INTRATTENIMENTO
+    {'tipo': 'uscita', 'categoria': 'Intrattenimento', 'descrizione': 'Cinema'},
+    {'tipo': 'uscita', 'categoria': 'Intrattenimento', 'descrizione': 'Concerti'},
+    {'tipo': 'uscita', 'categoria': 'Intrattenimento', 'descrizione': 'Eventi'},
+
+    // HOBBY
+    {'tipo': 'uscita', 'categoria': 'Hobby', 'descrizione': 'Sport'},
+    {'tipo': 'uscita', 'categoria': 'Hobby', 'descrizione': 'Strumenti musicali'},
+    {'tipo': 'uscita', 'categoria': 'Hobby', 'descrizione': 'Materiale creativo'},
+
+    // RISPARMIO
+    {'tipo': 'uscita', 'categoria': 'Risparmio', 'descrizione': 'Accantonamento mensile'},
+    {'tipo': 'uscita', 'categoria': 'Risparmio', 'descrizione': 'Obiettivo annuale'},
+
+    // INVESTIMENTI
+    {'tipo': 'uscita', 'categoria': 'Investimenti', 'descrizione': 'ETF'},
+    {'tipo': 'uscita', 'categoria': 'Investimenti', 'descrizione': 'Azioni'},
+    {'tipo': 'uscita', 'categoria': 'Investimenti', 'descrizione': 'PAC'},
+
+    // FONDO EMERGENZA
+    {'tipo': 'uscita', 'categoria': 'Fondo emergenza', 'descrizione': 'Accantonamento'},
+
+    // PRESTITI
+    {'tipo': 'uscita', 'categoria': 'Prestiti', 'descrizione': 'Rimborso mensile'},
+
+    // ENTRATE
+    {'tipo': 'entrata', 'categoria': 'Stipendio', 'descrizione': 'Mensile'},
+    {'tipo': 'entrata', 'categoria': 'Stipendio', 'descrizione': 'Bonus'},
+    {'tipo': 'entrata', 'categoria': 'Entrate extra', 'descrizione': 'Vendite'},
+    {'tipo': 'entrata', 'categoria': 'Entrate extra', 'descrizione': 'Lavoretti'},
+  ];
+
+  for (final d in descrizioni) {
+    await db.insert('descrizioni', d, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+}
+
 
     final countMetodi = Sqflite.firstIntValue(
       await db.rawQuery('SELECT COUNT(*) FROM metodi_pagamento'),
@@ -269,23 +460,25 @@ String formatEuro(double value) {
      CATEGORIE
      ============================ */
 
-  Future<void> insertCategoria({
-    required MovimentoTipo tipo,
-    required String nome,
-  }) async {
-    final db = await database;
+Future<void> insertCategoria({
+  required MovimentoTipo tipo,
+  required String nome,
+  required int idMacroarea,
+}) async {
+  final db = await database;
 
-    final tipoString = tipo == MovimentoTipo.entrata ? "entrata" : "uscita";
+  final tipoString = tipo == MovimentoTipo.entrata ? "entrata" : "uscita";
 
-    await db.insert(
-      'categorie',
-      {
-        'nome': normalizeSmart(nome),
-        'tipo': tipoString,
-      },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
-  }
+  await db.insert(
+    'categorie',
+    {
+      'nome': normalizeSmart(nome),
+      'tipo': tipoString,
+      'idMacroarea': idMacroarea,
+    },
+    conflictAlgorithm: ConflictAlgorithm.ignore,
+  );
+}
 
 
 
@@ -552,38 +745,65 @@ String formatEuro(double value) {
   }
 
   Future<int> insertMovimento(Movimento m) async {
-    final db = await database;
+  print('DEBUG DB: entro in insertMovimento con: ${m.toMap()}');
+  final db = await database;
 
-    final map = m.toMap();
+  final map = m.toMap();
 
-    map['categoria'] = normalizeSmart(map['categoria'] ?? "");
-    map['descrizione'] = normalizeSmart(map['descrizione'] ?? "");
-    map['puntoVendita'] = normalizeSmart(map['puntoVendita'] ?? "");
-    map['metodoPagamento'] = normalizeSmart(map['metodoPagamento'] ?? "");
-    map['nota'] = normalizeSmart(map['nota'] ?? "");
-    map['origine'] = m.origine.name;
+  // Salvo la categoria originale PRIMA della normalizzazione
+  final categoriaOriginale = map['categoria'];
 
+  // Normalizzazioni
+  map['categoria'] = map['categoria'];
+// ❌ NON normalizzare la descrizione qui
+// map['descrizione'] = normalizeSmart(map['descrizione'] ?? "");
+map['puntoVendita'] = normalizeSmart(map['puntoVendita'] ?? "");
+map['metodoPagamento'] = normalizeSmart(map['metodoPagamento'] ?? "");
+map['nota'] = normalizeSmart(map['nota'] ?? "");
 
-      map['importo'] = m.importo;
+  map['origine'] = m.origine.name;
 
-    //Campi Ricerca Smart
-    map['searchCategoria'] = normalizeSearch(map['categoria']);
-    map['searchDescrizione'] = normalizeSearch(map['descrizione']);
-    map['searchPuntoVendita'] = normalizeSearch(map['puntoVendita']);
-    map['searchMetodoPagamento'] = normalizeSearch(map['metodoPagamento']); 
-    return await db.insert(
-      'movimenti',
-      map,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+  map['importo'] = m.importo;
+
+  // 🔥 Lookup macroarea usando la categoria ORIGINALE
+  final res = await db.query(
+    'categorie',
+    where: 'nome = ?',
+    whereArgs: [categoriaOriginale],
+    limit: 1,
+  );
+
+  if (res.isEmpty) {
+    print("ERRORE: categoria non trovata: $categoriaOriginale");
+    throw Exception('Categoria non trovata: $categoriaOriginale');
   }
+
+  final idMacroarea = res.first['idMacroarea'];
+
+  map['idMacroarea'] = idMacroarea;
+
+  // Campi ricerca smart
+  map['searchCategoria'] = normalizeSearch(map['categoria']);
+  map['searchDescrizione'] = normalizeSearch(map['descrizione']);
+  map['searchPuntoVendita'] = normalizeSearch(map['puntoVendita']);
+  map['searchMetodoPagamento'] = normalizeSearch(map['metodoPagamento']);
+
+  print("MOVIMENTO SALVATO: $map");
+print('DEBUG DB: sto per fare db.insert movimenti con map: $map');
+  return await db.insert(
+    'movimenti',
+    map,
+    conflictAlgorithm: ConflictAlgorithm.replace,
+  );
+}
 
   Future<int> updateMovimento(Movimento m) async {
     final db = await database;
 
     final map = m.toMap();
 
-    map['categoria'] = normalizeSmart(map['categoria'] ?? "");
+    final categoriaOriginale = map['categoria'];  // salva la versione originale
+    map['categoria'] = map['categoria'];
     map['descrizione'] = normalizeSmart(map['descrizione'] ?? "");
     map['puntoVendita'] = normalizeSmart(map['puntoVendita'] ?? "");
     map['metodoPagamento'] = normalizeSmart(map['metodoPagamento'] ?? "");
@@ -660,6 +880,78 @@ String formatEuro(double value) {
   return res.map((e) => Movimento.fromMap(e)).toList();
 }
 
+/*==============================
+FUNZIONI DASHBOARD 50-30-20
+================================*/
+
+Future<double> getTotaleEntrateMese(int year, int month) async {
+  final db = await database;
+
+  final res = await db.rawQuery('''
+    SELECT SUM(importo) AS totale
+    FROM movimenti
+    WHERE tipo = 'entrata'
+      AND strftime('%Y', data) = ?
+      AND strftime('%m', data) = ?
+  ''', [
+    year.toString(),
+    month.toString().padLeft(2, '0'),
+  ]);
+
+  final value = res.first['totale'];
+  return value == null ? 0.0 : (value as num).toDouble();
+}
+
+
+Future<Map<String, double>> getUscitePerMacroarea(int year, int month) async {
+  final db = await database;
+
+  final res = await db.rawQuery('''
+    SELECT m.idMacroarea, SUM(m.importo) AS totale
+    FROM movimenti m
+    WHERE m.tipo = 'uscita'
+      AND strftime('%Y', m.data) = ?
+      AND strftime('%m', m.data) = ?
+    GROUP BY m.idMacroarea
+  ''', [
+    year.toString(),
+    month.toString().padLeft(2, '0'),
+  ]);
+
+  final macro = await db.query('macroaree');
+
+  final result = <String, double>{};
+
+  for (final row in res) {
+    final id = row['idMacroarea'] as int;
+    final totale = row['totale'] == null ? 0.0 : (row['totale'] as num).toDouble();
+
+    final nome = macro.firstWhere((m) => m['id'] == id)['nome'] as String;
+
+    result[nome] = totale;
+  }
+
+  return result;
+}
+
+Future<double> getTotaleUsciteMese(int year, int month) async {
+  final db = await database;
+
+  final res = await db.rawQuery('''
+    SELECT SUM(importo) AS totale
+    FROM movimenti
+    WHERE tipo = 'uscita'
+      AND strftime('%Y', data) = ?
+      AND strftime('%m', data) = ?
+  ''', [
+    year.toString(),
+    month.toString().padLeft(2, '0'),
+  ]);
+
+  final value = res.first['totale'];
+  return value == null ? 0.0 : (value as num).toDouble();
+}
+
 
   /* ============================
      PREDITTIVI
@@ -707,6 +999,20 @@ String formatEuro(double value) {
 
     return result;
   }
+
+Future<List<String>> getCategorieByTipo(MovimentoTipo tipo) async {
+  final db = await database;
+
+  final res = await db.query(
+    'categorie',
+    columns: ['nome'],
+    where: 'tipo = ?',
+    whereArgs: [tipo == MovimentoTipo.uscita ? 'uscita' : 'entrata'],
+    orderBy: 'nome COLLATE NOCASE ASC',
+  );
+
+  return res.map((e) => e['nome'] as String).toList();
+}
 
 
   Future<List<String>> getDescrizioniPredittive({

@@ -75,7 +75,8 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
                 searchCategoria: movimento.searchCategoria,
                 searchDescrizione: movimento.searchDescrizione,
                 searchPuntoVendita: movimento.searchPuntoVendita,
-                dataCreazione: DateTime.now(), // 👈 NUOVO
+                dataCreazione: DateTime.now(), 
+                idMacroarea: 0,
               );
 
 
@@ -145,7 +146,8 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
               searchCategoria: movimento.searchCategoria,
               searchDescrizione: movimento.searchDescrizione,
               searchPuntoVendita: movimento.searchPuntoVendita,
-              dataCreazione: DateTime.now(), // 👈 NUOVO
+              dataCreazione: DateTime.now(),
+              idMacroarea: 0, // 👈 NUOVO
             );
 
 

@@ -11,6 +11,7 @@ import 'dettaglio_movimento_page.dart';
 import 'movimenti_page.dart';
 import '../services/ocr_flow.dart';
 import 'package:spese_app/utils/format_euro.dart';
+import 'package:spese_app/pages/dashboard_page.dart';
 
 
 class HomePage extends StatefulWidget {
@@ -28,10 +29,17 @@ class _HomePageState extends State<HomePage> {
   String? _filtroCategoria;
 
   @override
-  void initState() {
-    super.initState();
+void initState() {
+  super.initState();
     _loadMovimenti();
-  }
+}
+
+@override
+void didChangeDependencies() {
+  super.didChangeDependencies();
+  _loadMovimenti();   // ricarica sempre i movimenti dal DB
+}
+
 
   Future<void> _loadMovimenti() async {
     final list = await DatabaseHelper.instance.getMovimenti();
@@ -147,14 +155,25 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bilancio'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _apriImpostazioni,
-          ),
-        ],
-      ),
+  title: const Text('Bilancio'),
+  actions: [
+    IconButton(
+      icon: const Icon(Icons.pie_chart),
+      tooltip: "Dashboard 50‑30‑20",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => DashboardPage()),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.settings),
+      onPressed: _apriImpostazioni,
+    ),
+  ],
+),
       body: Column(
         children: [
           // --- MENU SUPERIORE ---
@@ -253,17 +272,23 @@ class _HomePageState extends State<HomePage> {
             child: const Icon(Icons.add),
             onPressed: () async {
               final result = await Navigator.push<Movimento>(
-                context,
-                MaterialPageRoute(
-                  fullscreenDialog: true,
-                  builder: (_) => const NuovoMovimentoPage(),
-                ),
-              );
+  context,
+  MaterialPageRoute(
+    fullscreenDialog: true,
+    builder: (_) => const NuovoMovimentoPage(),
+  ),
+);
 
-              if (result != null) {
-                await DatabaseHelper.instance.insertMovimento(result);
-                await _loadMovimenti();
-              }
+print('DEBUG HOME: risultato da NuovoMovimentoPage = $result');
+
+if (result != null) {
+  print('DEBUG HOME: chiamo insertMovimento');
+  await DatabaseHelper.instance.insertMovimento(result);
+  print('DEBUG HOME: dopo insertMovimento, chiamo _loadMovimenti');
+  await _loadMovimenti();
+  print('DEBUG HOME: dopo _loadMovimenti');
+}
+
             },
           ),
           const SizedBox(width: 12),

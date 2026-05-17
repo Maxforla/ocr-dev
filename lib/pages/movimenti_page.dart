@@ -38,6 +38,12 @@ class _MovimentiPageState extends State<MovimentiPage> {
     _caricaMovimenti();
   }
 
+@override
+void didChangeDependencies() {
+  super.didChangeDependencies();
+  _caricaMovimenti();   // ricarica sempre i movimenti dal DB
+}
+
 
   @override
   void dispose() {
@@ -135,6 +141,7 @@ void _onSearchChanged(String value) {
         searchDescrizione: normalizeSmart(parsed.descrizione ?? "Spesa rilevata da OCR"),
         searchPuntoVendita: normalizeSmart(parsed.puntoVendita ?? ""),
         dataCreazione: DateTime.now(),
+        idMacroarea: 0,
       );
 
 

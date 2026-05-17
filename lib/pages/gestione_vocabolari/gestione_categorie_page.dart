@@ -35,41 +35,43 @@ class _GestioneCategoriePageState extends State<GestioneCategoriePage> {
     });
   }
 
-  Future<void> _aggiungiCategoria() async {
-    final controller = TextEditingController();
+ Future<void> _aggiungiCategoria() async {
+  final controller = TextEditingController();
 
-    final nuovoNome = await showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Nuova categoria'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Nome categoria'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annulla'),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(context, controller.text.trim()),
-            child: const Text('Aggiungi'),
-          ),
-        ],
+  final nuovoNome = await showDialog<String>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Nuova categoria'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: 'Nome categoria'),
       ),
-    );
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annulla'),
+        ),
+        TextButton(
+          onPressed: () =>
+              Navigator.pop(context, controller.text.trim()),
+          child: const Text('Aggiungi'),
+        ),
+      ],
+    ),
+  );
 
-    if (nuovoNome == null || nuovoNome.isEmpty) return;
+  if (nuovoNome == null || nuovoNome.isEmpty) return;
 
-    await DatabaseHelper.instance.insertCategoria(
-      tipo: widget.tipo,
-      nome: nuovoNome,
-    );
+ await DatabaseHelper.instance.insertCategoria(
+  tipo: widget.tipo,
+  nome: nuovoNome,
+  idMacroarea: 1, // Necessità (temporaneo)
+);
 
-    _loadCategorie();
-  }
+  _loadCategorie();
+}
+
 
   Future<void> _rinominaCategoria(String nomeAttuale) async {
     final controller = TextEditingController(text: nomeAttuale);
