@@ -1044,6 +1044,25 @@ Future<List<String>> getCategorieByTipo(MovimentoTipo tipo) async {
     return result;
   }
 
+Future<String?> getMetodoPagamentoByPuntoVendita(String puntoVendita) async {
+  final db = await database;
+
+  final res = await db.query(
+    'movimenti',
+    columns: ['metodoPagamento'],
+    where: 'puntoVendita = ?',
+    whereArgs: [puntoVendita],
+    orderBy: 'id DESC',
+    limit: 1,
+  );
+
+  if (res.isNotEmpty) {
+    return res.first['metodoPagamento'] as String?;
+  }
+
+  return null;
+}
+
 
   Future<List<String>> getMetodiPagamentoListaCompleta() async {
     return getMetodiPagamento();
