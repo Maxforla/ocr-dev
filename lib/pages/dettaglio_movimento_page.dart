@@ -3,7 +3,8 @@
 import 'package:flutter/material.dart';
 import '../models/movimento.dart';
 import 'nuovo_movimento_page.dart';
-import '../database_helper.dart';
+import 'package:spese_app/utils/database_helper.dart';
+
 import 'package:spese_app/utils/format_euro.dart';
 
 class DettaglioMovimentoPage extends StatefulWidget {

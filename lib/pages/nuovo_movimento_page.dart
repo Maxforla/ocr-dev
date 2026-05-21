@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 
-import '../database_helper.dart';
+import 'package:spese_app/utils/database_helper.dart';
+
 import '../models/movimento.dart';
 import '../utils/normalize_smart.dart';
 import '../utils/format_importo.dart';
-import '../database_helper.dart' show DatabaseHelper;
+import 'package:spese_app/utils/database_helper.dart';
+
 
 class NuovoMovimentoPage extends StatefulWidget {
   final Movimento? movimentoDaModificare;

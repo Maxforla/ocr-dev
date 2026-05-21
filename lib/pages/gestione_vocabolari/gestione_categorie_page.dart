@@ -2,7 +2,8 @@
 
 import 'package:flutter/material.dart';
 
-import '../../database_helper.dart';
+import 'package:spese_app/utils/database_helper.dart';
+
 import '../../models/movimento.dart';
 import 'gestione_descrizioni_page.dart';
 

@@ -1,4 +1,5 @@
-import '../database_helper.dart';
+import 'package:spese_app/utils/database_helper.dart';
+
 
 String euro(double value) {
   final formatted = DatabaseHelper.instance.formatEuro(value);

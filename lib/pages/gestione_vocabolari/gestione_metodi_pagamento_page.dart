@@ -2,7 +2,8 @@
 
 import 'package:flutter/material.dart';
 
-import '../../database_helper.dart';
+import 'package:spese_app/utils/database_helper.dart';
+
 
 class GestioneMetodiPagamentoPage extends StatefulWidget {
   const GestioneMetodiPagamentoPage({super.key});

@@ -2,7 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
-import 'models/movimento.dart';
+import '../models/movimento.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._();
@@ -154,12 +154,10 @@ String formatEuro(double value) {
   searchPuntoVendita TEXT,
   searchMetodoPagamento TEXT,
   dataCreazione TEXT,
-  idMacroarea INTEGER NOT NULL,
+  idMacroarea INTEGER,
   FOREIGN KEY(idMacroarea) REFERENCES macroaree(id)
 );
   ''');
-
-
 
 await db.execute('''
   CREATE TABLE macroaree (
@@ -765,22 +763,28 @@ map['nota'] = normalizeSmart(map['nota'] ?? "");
 
   map['importo'] = m.importo;
 
-  // 🔥 Lookup macroarea usando la categoria ORIGINALE
-  final res = await db.query(
-    'categorie',
-    where: 'nome = ?',
-    whereArgs: [categoriaOriginale],
-    limit: 1,
-  );
+  // Assegno la macroarea SOLO alle uscite.
+  // Le entrate NON devono finire in nessuna macroarea.
+  if (m.tipo == MovimentoTipo.uscita) {
+    final res = await db.query(
+      'categorie',
+      where: 'nome = ?',
+      whereArgs: [categoriaOriginale],
+      limit: 1,
+    );
 
-  if (res.isEmpty) {
-    print("ERRORE: categoria non trovata: $categoriaOriginale");
-    throw Exception('Categoria non trovata: $categoriaOriginale');
+    if (res.isEmpty) {
+      print("ERRORE: categoria non trovata: $categoriaOriginale");
+      throw Exception('Categoria non trovata: $categoriaOriginale');
+    }
+
+    final idMacroarea = res.first['idMacroarea'];
+    map['idMacroarea'] = idMacroarea;
+  } else {
+    // ENTRATA → nessuna macroarea
+    map['idMacroarea'] = null;
   }
 
-  final idMacroarea = res.first['idMacroarea'];
-
-  map['idMacroarea'] = idMacroarea;
 
   // Campi ricerca smart
   map['searchCategoria'] = normalizeSearch(map['categoria']);

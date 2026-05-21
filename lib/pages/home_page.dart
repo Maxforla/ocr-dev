@@ -1,7 +1,8 @@
 // lib/pages/home_page.dart
 
 import 'package:flutter/material.dart';
-import '../database_helper.dart';
+import 'package:spese_app/utils/database_helper.dart';
+
 import '../models/movimento.dart';
 import 'nuovo_movimento_page.dart';
 import 'gestione_vocabolari/gestione_vocabolari_page.dart';
@@ -11,7 +12,7 @@ import 'dettaglio_movimento_page.dart';
 import 'movimenti_page.dart';
 import '../services/ocr_flow.dart';
 import 'package:spese_app/utils/format_euro.dart';
-import 'package:spese_app/pages/dashboard_page.dart';
+import 'package:spese_app/pages/dashboard_503020/dashboard_503020_page.dart';
 
 
 class HomePage extends StatefulWidget {
@@ -162,9 +163,9 @@ void didChangeDependencies() {
       tooltip: "Dashboard 50‑30‑20",
       onPressed: () {
         Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => DashboardPage()),
-        );
+  context,
+  MaterialPageRoute(builder: (_) => Dashboard503020Page()),
+);
       },
     ),
 

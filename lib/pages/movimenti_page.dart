@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/movimento.dart';
-import '../database_helper.dart';
+import 'package:spese_app/utils/database_helper.dart';
+
 import 'dettaglio_movimento_page.dart';
 import '../services/ocr_service.dart';
 import '../services/ocr_parser.dart';

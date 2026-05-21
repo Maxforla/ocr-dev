@@ -2,7 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
-import 'database_helper.dart';
+import 'package:spese_app/utils/database_helper.dart';
+
 import 'vocabolari.dart';
 import 'pages/home_page.dart';
 import 'package:path/path.dart' as p;
