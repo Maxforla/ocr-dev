@@ -58,6 +58,7 @@ final Map<String, Map<String, String>> productMap = {
   'surgelati': {'categoria': 'Alimentazione', 'descrizione': 'Prodotti surgelati'},
   'semi': {'categoria': 'Alimentazione', 'descrizione': 'Spesa supermercato'},
 
+
   // ============================================================
   // 🟩 CASA
   // ============================================================

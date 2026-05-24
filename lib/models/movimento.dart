@@ -14,35 +14,37 @@ class Movimento {
   final String? articoli;
   final OrigineDati origine;
 
-  final String searchCategoria;
-  final String searchDescrizione;
-  final String searchPuntoVendita;
-  final String searchMetodoPagamento;
+  // 🔥 RESI NULLABLE
+  final String? searchCategoria;
+  final String? searchDescrizione;
+  final String? searchPuntoVendita;
+  final String? searchMetodoPagamento;
 
   final DateTime dataCreazione;
-
-  final int? idMacroarea; // opzionale, lo calcola il DB
+  final int? idMacroarea;
 
   Movimento({
-  this.id,
-  required this.tipo,
-  required this.data,
-  required this.categoria,
-  required this.descrizione,
-  required this.importo,
-  required this.puntoVendita,
-  required this.metodoPagamento,
-  this.nota,
-  this.articoli,   // ⭐ aggiunto qui
-  required this.origine,
-  this.searchCategoria = "",
-  this.searchDescrizione = "",
-  this.searchPuntoVendita = "",
-  this.searchMetodoPagamento = "",
-  required this.dataCreazione,
-  this.idMacroarea,
-});
+    this.id,
+    required this.tipo,
+    required this.data,
+    required this.categoria,
+    required this.descrizione,
+    required this.importo,
+    required this.puntoVendita,
+    required this.metodoPagamento,
+    this.nota,
+    this.articoli,
+    required this.origine,
 
+    // 🔥 DEFAULT SICURI
+    this.searchCategoria,
+    this.searchDescrizione,
+    this.searchPuntoVendita,
+    this.searchMetodoPagamento,
+
+    required this.dataCreazione,
+    this.idMacroarea,
+  });
 
   factory Movimento.fromMap(Map<String, dynamic> map) {
     return Movimento(
@@ -55,64 +57,53 @@ class Movimento {
       puntoVendita: map['puntoVendita'] ?? "",
       metodoPagamento: map['metodoPagamento'] ?? "",
       nota: map['nota'],
-      articoli: map['articoli'],   // ⭐ aggiunto qui
+      articoli: map['articoli'],
       origine: OrigineDati.values.firstWhere(
         (e) => e.name == (map['origine'] ?? 'manuale'),
         orElse: () => OrigineDati.manuale,
       ),
+
+      // 🔥 SEMPRE STRINGA
       searchCategoria: map['searchCategoria'] ?? "",
       searchDescrizione: map['searchDescrizione'] ?? "",
       searchPuntoVendita: map['searchPuntoVendita'] ?? "",
       searchMetodoPagamento: map['searchMetodoPagamento'] ?? "",
 
-      // gestione robusta di dataCreazione
       dataCreazione: (() {
-  final v = map['dataCreazione'];
+        final v = map['dataCreazione'];
+        if (v == null) return DateTime.now();
+        if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+        if (v is String) {
+          try { return DateTime.parse(v); } catch (_) {}
+        }
+        return DateTime.now();
+      })(),
 
-  if (v == null) return DateTime.now();
-
-  // Caso 1: timestamp (INTEGER)
-  if (v is int) {
-    return DateTime.fromMillisecondsSinceEpoch(v);
-  }
-
-  // Caso 2: stringa ISO
-  if (v is String) {
-    try {
-      return DateTime.parse(v);
-    } catch (_) {
-      return DateTime.now();
-    }
-  }
-
-  return DateTime.now();
-})(),
-
-
-      idMacroarea: map['idMacroarea'], // letto dal DB
+      idMacroarea: map['idMacroarea'],
     );
   }
 
   Map<String, dynamic> toMap() {
-  return {
-    'id': id,
-    'tipo': tipo.name,
-    'data': data.toIso8601String(),
-    'categoria': categoria,
-    'descrizione': descrizione,
-    'importo': importo,
-    'puntoVendita': puntoVendita,
-    'metodoPagamento': metodoPagamento,
-    'nota': nota,
-    'articoli': articoli,   // ⭐ nuovo campo
-    'origine': origine.name,
-    'searchCategoria': searchCategoria,
-    'searchDescrizione': searchDescrizione,
-    'searchPuntoVendita': searchPuntoVendita,
-    'searchMetodoPagamento': searchMetodoPagamento,
-    'dataCreazione': dataCreazione.toIso8601String(),
-    // idMacroarea NON viene messo qui → lo calcola insertMovimento()
-  };
-}
+    return {
+      'id': id,
+      'tipo': tipo.name,
+      'data': data.toIso8601String(),
+      'categoria': categoria,
+      'descrizione': descrizione,
+      'importo': importo,
+      'puntoVendita': puntoVendita,
+      'metodoPagamento': metodoPagamento,
+      'nota': nota,
+      'articoli': articoli,
+      'origine': origine.name,
 
+      // 🔥 SEMPRE STRINGA
+      'searchCategoria': searchCategoria ?? "",
+      'searchDescrizione': searchDescrizione ?? "",
+      'searchPuntoVendita': searchPuntoVendita ?? "",
+      'searchMetodoPagamento': searchMetodoPagamento ?? "",
+
+      'dataCreazione': dataCreazione.toIso8601String(),
+    };
+  }
 }

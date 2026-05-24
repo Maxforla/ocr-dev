@@ -1,6 +1,13 @@
+// ===============================================================
+// OCR PARSER — VERSIONE COMPLETA, ROBUSTA E COMPATIBILE
+// ===============================================================
+
 import 'package:flutter/foundation.dart';
 import '../data/vocabolario_prodotti.dart';
-import '../vocabolari.dart';
+
+// ===============================================================
+// RISULTATO OCR
+// ===============================================================
 
 class OcrResult {
   final String testoGrezzo;
@@ -22,226 +29,290 @@ class OcrResult {
   });
 }
 
+// ===============================================================
+// PARSER PUBBLICO (CON ISOLATE)
+// ===============================================================
+
 class OcrParser {
-  // ============================================================
-  // ENTRY POINT ASINCRONO (usato fuori dagli isolate)
-  // ============================================================
   Future<OcrResult> parse(String raw) async {
     return compute(_parseSync, raw);
   }
 
-  // ============================================================
-  // WRAPPER PUBBLICO PER GLI ISOLATE
-  // ============================================================
   static OcrResult internalParseSync(String raw) {
     return _parseSync(raw);
   }
 
-  // ============================================================
-  // PARSER SINCRONO (usato da compute e dagli isolate)
-  // ============================================================
   static OcrResult _parseSync(String raw) {
     final parser = _OcrParserInternal();
     return parser.parse(raw);
   }
 }
 
+// ===============================================================
+// PARSER INTERNO — VERSIONE FUZZY
+// ===============================================================
+
 class _OcrParserInternal {
-  // ============================================================
-  // FUNZIONE PRINCIPALE
-  // ============================================================
+  // -------------------------------------------------------------
+  // ENTRY POINT
+  // -------------------------------------------------------------
   OcrResult parse(String raw) {
-    final text = raw.toLowerCase();
-    final lines = _splitLines(raw);
+    final normalized = _normalize(raw);
+    final lines = _splitLines(normalized);
 
-    // 1) TENTATIVO PRINCIPALE: PRODOTTI
-    final productMatch = _detectProduct(text);
-    if (productMatch != null) {
-      return _buildResult(
-        raw,
-        lines,
-        categoria: productMatch['categoria']!,
-        descrizione: productMatch['descrizione']!,
-      );
-    }
+    final importo = _estraiTotale(lines);
+    final metodo = _estraiMetodoPagamento(lines);
+    final puntoVendita = _estraiPuntoVendita(lines);
+    final data = _estraiData(lines);
 
-    // 2) FALLBACK: categorie base (ristorante, farmacia, ecc.)
-    final fallback = _detectFallbackCategory(text);
-    if (fallback != null) {
-      return _buildResult(
-        raw,
-        lines,
-        categoria: fallback['categoria']!,
-        descrizione: fallback['descrizione']!,
-      );
-    }
+    final categoriaDescrizione = _detectCategoriaEDescrizione(normalized);
 
-    // 3) FALLBACK FINALE
-    return _buildResult(
-      raw,
-      lines,
-      categoria: 'Altro',
-      descrizione: 'Personalizza descrizione',
+    return OcrResult(
+      testoGrezzo: raw,
+      puntoVendita: puntoVendita,
+      categoria: categoriaDescrizione['categoria'],
+      descrizione: categoriaDescrizione['descrizione'],
+      metodoPagamento: metodo,
+      importo: importo,
+      data: data,
     );
   }
 
-  // ============================================================
-  // CERCA IL PRIMO PRODOTTO NEL TESTO (P1)
-  // ============================================================
-  Map<String, String>? _detectProduct(String text) {
-  // Ignora "acqua" se è nella prima riga (nome negozio)
-  final firstLine = text.split('\n').first.trim();
-  final ignoreAcqua = firstLine.contains('acqua');
-
-  for (final key in productMap.keys) {
-    if (ignoreAcqua && key == 'acqua') continue;
-
-    if (text.contains(key)) {
-      return productMap[key];
-    }
+  // -------------------------------------------------------------
+  // NORMALIZZAZIONE
+  // -------------------------------------------------------------
+  String _normalize(String input) {
+    return input
+        .replaceAll('\r', '\n')
+        .replaceAll('\t', ' ')
+        .replaceAll(RegExp(r' +'), ' ')
+        .replaceAll(RegExp(r'\n+'), '\n')
+        .trim()
+        .toLowerCase();
   }
-  return null;
-}
 
+  List<String> _splitLines(String t) {
+    return t
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+  }
 
-  // ============================================================
-  // FALLBACK CATEGORIE BASE (ristorante, farmacia, ecc.)
-  // ============================================================
-  Map<String, String>? _detectFallbackCategory(String text) {
-    // RISTORAZIONE
-    if (text.contains('ristorante') ||
-        text.contains('pizzeria') ||
-        text.contains('trattoria') ||
-        text.contains('bar') ||
-        text.contains('caff')) {
-      return {
-        'categoria': 'Ristorazione',
-        'descrizione': 'Ristorante'
-      };
+  // -------------------------------------------------------------
+  // IMPORTO TOTALE (FUZZY)
+// -------------------------------------------------------------
+  double? _estraiTotale(List<String> righe) {
+    // 1) CERCA RIGHE "TOTALE COMPLESSIVO" (FUZZY) O "IMPORTO PAGATO"
+    for (var i = righe.length - 1; i >= 0; i--) {
+      final r = righe[i];
+      if (_isRigaTotaleFuzzy(r) || _isRigaImportoPagato(r)) {
+        final v = _estraiNumeroPlausibile(r);
+        if (v != null) return v;
+      }
     }
 
-    // SALUTE
-    if (text.contains('farmacia') ||
-        text.contains('parafarmacia') ||
-        text.contains('sanitar')) {
-      return {
-        'categoria': 'Salute e Benessere',
-        'descrizione': 'Farmacia'
-      };
+    // 2) FALLBACK: CERCA RIGHE CON "TOTALE" GENERICO
+    for (var i = righe.length - 1; i >= 0; i--) {
+      final r = righe[i];
+      if (r.toLowerCase().contains('totale')) {
+        final v = _estraiNumeroPlausibile(r);
+        if (v != null) return v;
+      }
+    }
+
+    // 3) FALLBACK FINALE: NUMERO PIÙ PLAUSIBILE NEL DOCUMENTO
+    double? best;
+    for (final r in righe) {
+      final v = _estraiNumeroPlausibile(r);
+      if (v != null) {
+        if (best == null || v > best) best = v;
+      }
+    }
+
+    return best;
+  }
+
+  bool _isRigaTotaleFuzzy(String riga) {
+    final l = riga.toLowerCase();
+
+    if (!l.contains('totale')) return false;
+
+    // parole chiave "complessivo" con errori OCR tollerati
+    const varianti = [
+      'complessivo',
+      'coyplessivo',
+      'coplessivo',
+      'complesivo',
+      'complessiv0',
+      'complesivo',
+      'complessiv',
+      'compless',
+      'comp lessivo',
+      'comp lessiv',
+      'comp less',
+    ];
+
+    for (final v in varianti) {
+      if (l.contains(v)) return true;
+    }
+
+    // se c'è "totale" e "comp" vicino, accettiamo comunque
+    if (l.contains('totale') && l.contains('comp')) return true;
+
+    return false;
+  }
+
+  bool _isRigaImportoPagato(String riga) {
+    final l = riga.toLowerCase();
+    return l.contains('importo pagato');
+  }
+
+  double? _estraiNumeroDaRiga(String riga) {
+    final regex =
+        RegExp(r'(\d{1,3}(\.\d{3})*|\d+)(,\d{2}|\.\d{2})?');
+    final match =
+        regex.allMatches(riga).map((m) => m.group(0)).whereType<String>().toList();
+    if (match.isEmpty) return null;
+
+    var raw = match.last;
+    raw = raw.replaceAll('.', '').replaceAll(',', '.');
+
+    return double.tryParse(raw);
+  }
+
+  double? _estraiNumeroPlausibile(String riga) {
+    final regex =
+        RegExp(r'(\d{1,3}(\.\d{3})*|\d+)(,\d{2}|\.\d{2})?');
+    final matches =
+        regex.allMatches(riga).map((m) => m.group(0)).whereType<String>().toList();
+    if (matches.isEmpty) return null;
+
+    var raw = matches.last;
+
+    if (raw.length > 10) return null;
+
+    raw = raw.replaceAll('.', '').replaceAll(',', '.');
+
+    final value = double.tryParse(raw);
+    if (value == null) return null;
+
+    if (value <= 0) return null;
+    if (value > 9999) return null;
+    if (!raw.contains('.')) return null;
+    if (value < 0.10) return null;
+
+    return value;
+  }
+
+  // -------------------------------------------------------------
+  // METODO DI PAGAMENTO
+  // -------------------------------------------------------------
+  String? _estraiMetodoPagamento(List<String> righe) {
+    final text = righe.join(' ').toLowerCase();
+
+    if (text.contains('pagamento elettronico') ||
+        text.contains('elettroni co') || // OCR storto
+        text.contains('elettronico') ||
+        text.contains('pos') ||
+        text.contains('carta') ||
+        text.contains('bancomat') ||
+        text.contains('debito') ||
+        text.contains('credito')) {
+      return 'Pagamento elettronico';
+    }
+
+    if (text.contains('contanti') || text.contains('cash')) {
+      return 'Contanti';
     }
 
     return null;
   }
 
-  // ============================================================
-  // COSTRUZIONE RISULTATO
-  // ============================================================
-  OcrResult _buildResult(
-    String raw,
-    List<String> lines, {
-    required String categoria,
-    required String descrizione,
-  }) {
-    return OcrResult(
-      testoGrezzo: raw,
-      puntoVendita: _extractPuntoVendita(lines),
-      categoria: categoria,
-      descrizione: descrizione,
-      metodoPagamento: _extractMetodoPagamento(lines),
-      importo: _extractImporto(lines),
-      data: _extractData(raw),
-    );
+  // -------------------------------------------------------------
+  // PUNTO VENDITA
+  // -------------------------------------------------------------
+  String? _estraiPuntoVendita(List<String> righe) {
+    final stopWords = [
+      'documento commerciale',
+      'di vendita',
+      'prestazione',
+      'scontrino',
+      'appendice',
+      'fattura',
+    ];
+
+    final candidate = <String>[];
+
+    for (var i = 0; i < righe.length && i < 7; i++) {
+      final r = righe[i];
+      final lower = r.toLowerCase();
+      if (stopWords.any((s) => lower.contains(s))) continue;
+      if (r.length < 3) continue;
+      candidate.add(r);
+    }
+
+    if (candidate.isEmpty) return null;
+
+    return candidate.take(2).join(' ');
   }
 
-  // ============================================================
-  // ESTRAZIONE IMPORTO
-  // ============================================================
-  double? _extractImporto(List<String> lines) {
-    final regex = RegExp(r'(\d{1,4}[.,]\d{2})');
+  // -------------------------------------------------------------
+  // DATA
+  // -------------------------------------------------------------
+  DateTime? _estraiData(List<String> righe) {
+    final regex = RegExp(r'(\d{2})[-/](\d{2})[-/](\d{4})');
 
-    for (final line in lines.reversed) {
-      final match = regex.firstMatch(line);
-      if (match != null) {
-        return double.tryParse(
-          match.group(1)!.replaceAll('.', '').replaceAll(',', '.'),
-        );
+    for (final r in righe) {
+      final m = regex.firstMatch(r);
+      if (m != null) {
+        final gg = int.tryParse(m.group(1)!);
+        final mm = int.tryParse(m.group(2)!);
+        final aa = int.tryParse(m.group(3)!);
+        if (gg != null && mm != null && aa != null) {
+          return DateTime(aa, mm, gg);
+        }
       }
     }
     return null;
   }
 
-  // ============================================================
-  // ESTRAZIONE METODO DI PAGAMENTO
-  // ============================================================
-  String _extractMetodoPagamento(List<String> lines) {
-  final text = lines.join(' ').toLowerCase();
-
-  if (text.contains('pagamento contante') ||
-      text.contains('pagamento in contante') ||
-      text.contains('pagamento contanti') ||
-      text.contains('pagamento cont.') ||
-      text.contains('contante')) {
-    return 'Contanti';
-  }
-
-  if (text.contains('pagamento elettronico') ||
-      text.contains('elettronico') ||
-      text.contains('pos')) {
-    return 'POS / Pagamento elettronico';
-  }
-
-  if (text.contains('bancomat')) return 'Bancomat / Debito';
-  if (text.contains('carta')) return 'Carta di debito';
-
-  return 'Altro';
-}
-
-  // ============================================================
-  // ESTRAZIONE PUNTO VENDITA
-  // ============================================================
-  String _extractPuntoVendita(List<String> lines) {
-    if (lines.isEmpty) return 'Punto vendita non rilevato';
-
-    final first = lines[0];
-    if (lines.length == 1) return first;
-
-    final second = lines[1].toLowerCase();
-    final isAddress = second.startsWith('via') ||
-        second.startsWith('viale') ||
-        second.startsWith('corso') ||
-        second.startsWith('piazza');
-
-    if (isAddress) return first;
-
-    return '$first – ${lines[1]}';
-  }
-
-  // ============================================================
-  // ESTRAZIONE DATA
-  // ============================================================
-  DateTime? _extractData(String raw) {
-    final regex = RegExp(r'(\d{2})[\/\-](\d{2})[\/\-](\d{4})');
-    final match = regex.firstMatch(raw);
-    if (match == null) return null;
-
-    try {
-      final giorno = int.parse(match.group(1)!);
-      final mese = int.parse(match.group(2)!);
-      final anno = int.parse(match.group(3)!);
-      return DateTime(anno, mese, giorno);
-    } catch (_) {
-      return null;
+  // -------------------------------------------------------------
+  // CATEGORIA + DESCRIZIONE (compatibile con productMap)
+  // -------------------------------------------------------------
+  Map<String, String> _detectCategoriaEDescrizione(String text) {
+    for (final key in productMap.keys) {
+      if (text.contains(key.toLowerCase())) {
+        return {
+          'categoria': productMap[key]!['categoria']!,
+          'descrizione': productMap[key]!['descrizione']!,
+        };
+      }
     }
-  }
 
-  // ============================================================
-  // UTILITY
-  // ============================================================
-  List<String> _splitLines(String t) {
-    return t
-        .split(RegExp(r'\r?\n'))
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
+    if (text.contains('bar') ||
+        text.contains('caff') ||
+        text.contains('ristorante') ||
+        text.contains('pizzeria') ||
+        text.contains('trattoria')) {
+      return {
+        'categoria': 'Ristorazione-Bar',
+        'descrizione': 'Consumazione al bar',
+      };
+    }
+
+    if (text.contains('farmacia') ||
+        text.contains('parafarmacia') ||
+        text.contains('sanitar')) {
+      return {
+        'categoria': 'Salute e Benessere',
+        'descrizione': 'Farmacia',
+      };
+    }
+
+    return {
+      'categoria': 'Altro',
+      'descrizione': 'Personalizza descrizione',
+    };
   }
 }

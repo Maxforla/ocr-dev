@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../models/movimento.dart';
 import 'nuovo_movimento_page.dart';
 import 'package:spese_app/utils/database_helper.dart';
-
 import 'package:spese_app/utils/format_euro.dart';
 
 class DettaglioMovimentoPage extends StatefulWidget {
@@ -76,10 +75,9 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
                 searchCategoria: movimento.searchCategoria,
                 searchDescrizione: movimento.searchDescrizione,
                 searchPuntoVendita: movimento.searchPuntoVendita,
-                dataCreazione: DateTime.now(), 
+                dataCreazione: DateTime.now(),
                 idMacroarea: 0,
               );
-
 
               final risultato = await Navigator.push(
                 context,
@@ -105,7 +103,8 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
                 context: context,
                 builder: (_) => AlertDialog(
                   title: const Text("Conferma eliminazione"),
-                  content: const Text("Vuoi davvero eliminare questo movimento?"),
+                  content:
+                      const Text("Vuoi davvero eliminare questo movimento?"),
                   actions: [
                     TextButton(
                       child: const Text("Annulla"),
@@ -131,37 +130,32 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
             icon: const Icon(Icons.save),
             tooltip: "Salva",
             onPressed: () async {
-            print("SALVATAGGIO OCR ESEGUITO");
-              // Creiamo una copia completa del movimento con id = null
-            final nuovoMovimento = Movimento(
-              id: null,
-              tipo: movimento.tipo,
-              data: movimento.data,
-              categoria: movimento.categoria,
-              descrizione: movimento.descrizione,
-              importo: movimento.importo,
-              puntoVendita: movimento.puntoVendita,
-              metodoPagamento: movimento.metodoPagamento,
-              nota: movimento.nota,
-              origine: movimento.origine,
-              searchCategoria: movimento.searchCategoria,
-              searchDescrizione: movimento.searchDescrizione,
-              searchPuntoVendita: movimento.searchPuntoVendita,
-              dataCreazione: DateTime.now(),
-              idMacroarea: 0, // 👈 NUOVO
-            );
+              print("SALVATAGGIO OCR ESEGUITO");
 
+              final nuovoMovimento = Movimento(
+                id: null,
+                tipo: movimento.tipo,
+                data: movimento.data,
+                categoria: movimento.categoria,
+                descrizione: movimento.descrizione,
+                importo: movimento.importo,
+                puntoVendita: movimento.puntoVendita,
+                metodoPagamento: movimento.metodoPagamento,
+                nota: movimento.nota,
+                origine: movimento.origine,
+                searchCategoria: movimento.searchCategoria,
+                searchDescrizione: movimento.searchDescrizione,
+                searchPuntoVendita: movimento.searchPuntoVendita,
+                dataCreazione: DateTime.now(),
+                idMacroarea: 0,
+              );
 
               await DatabaseHelper.instance.insertMovimento(nuovoMovimento);
-
               Navigator.pop(context, nuovoMovimento);
             },
-
-
           ),
         ],
       ),
-
 
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -191,7 +185,7 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
               child: _card(
                 icon: Icons.folder,
                 title: "Categoria",
-                value: movimento.categoria,
+                value: movimento.categoria ?? "",
               ),
             ),
 
@@ -200,7 +194,7 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
               child: _card(
                 icon: Icons.label,
                 title: "Descrizione",
-                value: movimento.descrizione,
+                value: movimento.descrizione ?? "",
               ),
             ),
 
@@ -209,7 +203,7 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
               child: _card(
                 icon: Icons.credit_card,
                 title: "Metodo di pagamento",
-                value: movimento.metodoPagamento,
+                value: movimento.metodoPagamento ?? "",
               ),
             ),
 
@@ -218,53 +212,41 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
               child: _card(
                 icon: Icons.store,
                 title: "Punto vendita",
-                value: movimento.puntoVendita,
+                value: movimento.puntoVendita ?? "",
               ),
             ),
 
-            // -------------------------
-// CARD: NOTA (se presente)
-// -------------------------
-if (movimento.nota != null && movimento.nota!.isNotEmpty)
-  _animatedCard(
-    index: 6,
-    child: _cardNota(movimento.nota!),
-  ),
+            if (movimento.nota != null && movimento.nota!.isNotEmpty)
+              _animatedCard(
+                index: 6,
+                child: _cardNota(movimento.nota!),
+              ),
 
-// -------------------------
-// CARD: ARTICOLI (se presenti)
-// -------------------------
-if (movimento.articoli != null && movimento.articoli!.trim().isNotEmpty)
-  _animatedCard(
-    index: 7,
-    child: _card(
-      icon: Icons.list,
-      title: "Articoli",
-      value: movimento.articoli!,
-    ),
-  ),
+            if (movimento.articoli != null &&
+                movimento.articoli!.trim().isNotEmpty)
+              _animatedCard(
+                index: 7,
+                child: _card(
+                  icon: Icons.list,
+                  title: "Articoli",
+                  value: movimento.articoli ?? "",
+                ),
+              ),
 
-// -------------------------
-// CARD: DATA
-// -------------------------
-_animatedCard(
-  index: 8,   // ← incrementato di 1
-  child: _card(
-    icon: Icons.calendar_today,
-    title: "Data",
-    value: _formatData(movimento.data),
-  ),
-),
-
+            _animatedCard(
+              index: 8,
+              child: _card(
+                icon: Icons.calendar_today,
+                title: "Data",
+                value: _formatData(movimento.data),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // ------------------------------------------------------------
-  // CARD MINIMAL
-  // ------------------------------------------------------------
   Widget _card({
     required IconData icon,
     required String title,
@@ -314,9 +296,6 @@ _animatedCard(
     );
   }
 
-  // ------------------------------------------------------------
-  // CARD NOTA ESPANDIBILE
-  // ------------------------------------------------------------
   Widget _cardNota(String nota) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -343,9 +322,7 @@ _animatedCard(
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 200),
             crossFadeState: notaEspansa
@@ -364,9 +341,7 @@ _animatedCard(
               style: const TextStyle(fontSize: 16),
             ),
           ),
-
           const SizedBox(height: 8),
-
           GestureDetector(
             onTap: () {
               setState(() => notaEspansa = !notaEspansa);
@@ -394,9 +369,6 @@ _animatedCard(
     );
   }
 
-  // ------------------------------------------------------------
-  // MICRO ANIMAZIONI
-  // ------------------------------------------------------------
   Widget _animatedCard({
     required int index,
     required Widget child,
