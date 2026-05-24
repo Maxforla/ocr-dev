@@ -1,6 +1,7 @@
 // lib/main.dart
 
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';        // <-- NECESSARIO PER CAMERA
 import 'package:sqflite/sqflite.dart';
 import 'package:spese_app/utils/database_helper.dart';
 
@@ -9,8 +10,15 @@ import 'pages/home_page.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-void main() async {
+// 🔥 LISTA GLOBALE DELLE CAMERE (usata da OcrService)
+List<CameraDescription>? cameras;
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 🔥 INIZIALIZZAZIONE OBBLIGATORIA PER IL PACCHETTO CAMERA
+  cameras = await availableCameras();
+
   runApp(const MyApp());
 }
 

@@ -222,20 +222,40 @@ class _DettaglioMovimentoPageState extends State<DettaglioMovimentoPage> {
               ),
             ),
 
-            if (movimento.nota != null && movimento.nota!.isNotEmpty)
-              _animatedCard(
-                index: 6,
-                child: _cardNota(movimento.nota!),
-              ),
+            // -------------------------
+// CARD: NOTA (se presente)
+// -------------------------
+if (movimento.nota != null && movimento.nota!.isNotEmpty)
+  _animatedCard(
+    index: 6,
+    child: _cardNota(movimento.nota!),
+  ),
 
-            _animatedCard(
-              index: 7,
-              child: _card(
-                icon: Icons.calendar_today,
-                title: "Data",
-                value: _formatData(movimento.data),
-              ),
-            ),
+// -------------------------
+// CARD: ARTICOLI (se presenti)
+// -------------------------
+if (movimento.articoli != null && movimento.articoli!.trim().isNotEmpty)
+  _animatedCard(
+    index: 7,
+    child: _card(
+      icon: Icons.list,
+      title: "Articoli",
+      value: movimento.articoli!,
+    ),
+  ),
+
+// -------------------------
+// CARD: DATA
+// -------------------------
+_animatedCard(
+  index: 8,   // ← incrementato di 1
+  child: _card(
+    icon: Icons.calendar_today,
+    title: "Data",
+    value: _formatData(movimento.data),
+  ),
+),
+
           ],
         ),
       ),

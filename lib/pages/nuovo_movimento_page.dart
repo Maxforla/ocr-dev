@@ -7,7 +7,8 @@ import '../models/movimento.dart';
 import '../utils/normalize_smart.dart';
 import '../utils/format_importo.dart';
 import 'package:spese_app/utils/database_helper.dart';
-
+// 🔥 IMPORT PER OCR (adatta il path se diverso nel tuo progetto)
+import 'package:spese_app/services/ocr_parser.dart';
 
 class NuovoMovimentoPage extends StatefulWidget {
   final Movimento? movimentoDaModificare;
@@ -23,14 +24,14 @@ class NuovoMovimentoPage extends StatefulWidget {
 
 class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
   String normalizeSearch(String input) {
-  if (input.trim().isEmpty) return "";
-  String cleaned = input
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^\w\s]'), '')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
-  return cleaned;
-}
+    if (input.trim().isEmpty) return "";
+    String cleaned = input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return cleaned;
+  }
 
   MovimentoTipo _tipo = MovimentoTipo.uscita;
   String? _categoria;
@@ -41,6 +42,7 @@ class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
   final _importoController = TextEditingController();
   final _puntoVenditaController = TextEditingController();
   final _notaController = TextEditingController();
+  final _articoliController = TextEditingController();
 
   List<String> _listaPuntiVendita = [];
 
@@ -88,6 +90,7 @@ class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
     }
 
     _notaController.text = m?.nota ?? '';
+    _articoliController.text = m?.articoli ?? '';
   }
 
   String _formatData(DateTime d) {
@@ -107,6 +110,20 @@ class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
     });
   }
 
+  // 🔍 FUNZIONE DI DEBUG OCR
+  void debugOCR(String testo) async {
+    final parser = OcrParser();
+    final r = await parser.parse(testo);
+
+    print("=== DEBUG OCR ===");
+    print("PdV: ${r.puntoVendita}");
+    print("Categoria: ${r.categoria}");
+    print("Descrizione: ${r.descrizione}");
+    print("Metodo: ${r.metodoPagamento}");
+    print("Note: ${r.testoGrezzo}");
+    print("=================");
+  }
+
   Future<void> _scegliData() async {
     final picked = await showDatePicker(
       context: context,
@@ -119,29 +136,30 @@ class _NuovoMovimentoPageState extends State<NuovoMovimentoPage> {
       setState(() => _data = picked);
     }
   }
-Future<int?> _scegliMacroarea() async {
-  final db = await DatabaseHelper.instance.database;
 
-  final macroaree = await db.query('macroaree');
+  Future<int?> _scegliMacroarea() async {
+    final db = await DatabaseHelper.instance.database;
 
-  return showDialog<int>(
-    context: context,
-    builder: (_) {
-      return AlertDialog(
-        title: const Text("Scegli macroarea"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: macroaree.map((m) {
-            return ListTile(
-              title: Text(m['nome'].toString()),
-              onTap: () => Navigator.pop(context, m['id'] as int),
-            );
-          }).toList(),
-        ),
-      );
-    },
-  );
-}
+    final macroaree = await db.query('macroaree');
+
+    return showDialog<int>(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text("Scegli macroarea"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: macroaree.map((m) {
+              return ListTile(
+                title: Text(m['nome'].toString()),
+                onTap: () => Navigator.pop(context, m['id'] as int),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +178,6 @@ Future<int?> _scegliMacroarea() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-
             // -------------------------
             // CARD: TIPO MOVIMENTO
             // -------------------------
@@ -218,8 +235,9 @@ Future<int?> _scegliMacroarea() async {
                 builder: (_, snapshot) {
                   final categorie = snapshot.data ?? [];
 
-                  // 🔥 Ordina alfabeticamente le categorie
-                  categorie.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+                  // Ordina alfabeticamente le categorie
+                  categorie.sort(
+                      (a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
                   final items = [...categorie, "__nuova__"];
 
@@ -237,9 +255,7 @@ Future<int?> _scegliMacroarea() async {
                         }
                         return ListTile(title: Text(item));
                       },
-                      // ⭐ AGGIUNTA: capitalizzazione on-blur nel campo di ricerca
-                      searchFieldProps: TextFieldProps(
-                      ),
+                      searchFieldProps: TextFieldProps(),
                     ),
                     dropdownDecoratorProps: const DropDownDecoratorProps(
                       dropdownSearchDecoration: InputDecoration(
@@ -274,50 +290,43 @@ Future<int?> _scegliMacroarea() async {
                   ),
                   builder: (_, snapshot) {
                     final descrizioni = snapshot.data ?? [];
-                    // 🔥 Ordina alfabeticamente le descrizioni
-                    descrizioni.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+                    // Ordina alfabeticamente le descrizioni
+                    descrizioni.sort(
+                        (a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
                     final items = [...descrizioni, "__nuova__"];
 
-                   return DropdownSearch<String>(
-  items: items,
-  selectedItem: _descrizione,
-
-  // ⭐ FIX DEFINITIVO: evita duplicati quando la descrizione ha 2+ parole
-  compareFn: (a, b) => a == b,
-
-  popupProps: PopupProps.menu(
-    showSearchBox: true,
-    itemBuilder: (context, item, isSelected) {
-      if (item == "__nuova__") {
-        return const ListTile(
-          leading: Icon(Icons.add, color: Colors.blue),
-          title: Text("Aggiungi nuova descrizione"),
-        );
-      }
-      return ListTile(title: Text(item));
-    },
-
-    // capitalizzazione on-blur
-    searchFieldProps: TextFieldProps(),
-  ),
-
-  dropdownDecoratorProps: const DropDownDecoratorProps(
-    dropdownSearchDecoration: InputDecoration(
-      border: OutlineInputBorder(),
-    ),
-  ),
-
-  dropdownBuilder: (context, selectedItem) {
-    if (selectedItem == "__nuova__") {
-      return const Text("Aggiungi nuova descrizione");
-    }
-    return Text(selectedItem ?? "");
-  },
-
-  onChanged: _onDescrizioneChanged,
-);
-
+                    return DropdownSearch<String>(
+                      items: items,
+                      selectedItem: _descrizione,
+                      // evita duplicati quando la descrizione ha 2+ parole
+                      compareFn: (a, b) => a == b,
+                      popupProps: PopupProps.menu(
+                        showSearchBox: true,
+                        itemBuilder: (context, item, isSelected) {
+                          if (item == "__nuova__") {
+                            return const ListTile(
+                              leading: Icon(Icons.add, color: Colors.blue),
+                              title: Text("Aggiungi nuova descrizione"),
+                            );
+                          }
+                          return ListTile(title: Text(item));
+                        },
+                        searchFieldProps: TextFieldProps(),
+                      ),
+                      dropdownDecoratorProps: const DropDownDecoratorProps(
+                        dropdownSearchDecoration: InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      dropdownBuilder: (context, selectedItem) {
+                        if (selectedItem == "__nuova__") {
+                          return const Text("Aggiungi nuova descrizione");
+                        }
+                        return Text(selectedItem ?? "");
+                      },
+                      onChanged: _onDescrizioneChanged,
+                    );
                   },
                 ),
               ),
@@ -332,7 +341,8 @@ Future<int?> _scegliMacroarea() async {
               highlight: ocrImporto,
               child: TextField(
                 controller: _importoController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   hintText: "0.00",
@@ -341,13 +351,14 @@ Future<int?> _scegliMacroarea() async {
                   final v = _importoController.text;
                   final formatted = formatImportoRealtime(v);
 
-                  _importoController.value = _importoController.value.copyWith(
+                  _importoController.value =
+                      _importoController.value.copyWith(
                     text: formatted,
-                    selection: TextSelection.collapsed(offset: formatted.length),
+                    selection:
+                        TextSelection.collapsed(offset: formatted.length),
                   );
                 },
               ),
-
             ),
 
             const SizedBox(height: 16),
@@ -377,11 +388,8 @@ Future<int?> _scegliMacroarea() async {
                     }
                     return ListTile(title: Text(item));
                   },
-                  // ⭐ AGGIUNTA: capitalizzazione on-blur nel campo di ricerca
-                  searchFieldProps: TextFieldProps(
-                  ),
+                  searchFieldProps: TextFieldProps(),
                 ),
-
                 dropdownDecoratorProps: const DropDownDecoratorProps(
                   dropdownSearchDecoration: InputDecoration(
                     border: OutlineInputBorder(),
@@ -409,19 +417,21 @@ Future<int?> _scegliMacroarea() async {
                 asyncItems: (String filtro) async {
                   List<String> lista;
                   if (filtro.isEmpty) {
-                    lista = await DatabaseHelper.instance.getMetodiPagamentoListaCompleta();
+                    lista = await DatabaseHelper.instance
+                        .getMetodiPagamentoListaCompleta();
                   } else {
-                    lista = await DatabaseHelper.instance.getMetodiPagamentoFiltrati(filtro);
+                    lista = await DatabaseHelper.instance
+                        .getMetodiPagamentoFiltrati(filtro);
                   }
 
-                  // 🔥 Ordina alfabeticamente i metodi di pagamento
-                  lista.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+                  // Ordina alfabeticamente i metodi di pagamento
+                  lista.sort(
+                      (a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
                   return [...lista, "__nuovo__"];
                 },
-                selectedItem: _metodoPagamento?.isEmpty ?? true
-                    ? null
-                    : _metodoPagamento,
+                selectedItem:
+                    _metodoPagamento?.isEmpty ?? true ? null : _metodoPagamento,
                 popupProps: PopupProps.menu(
                   showSearchBox: true,
                   itemBuilder: (context, item, isSelected) {
@@ -433,9 +443,7 @@ Future<int?> _scegliMacroarea() async {
                     }
                     return ListTile(title: Text(item));
                   },
-                  // ⭐ AGGIUNTA: capitalizzazione on-blur nel campo di ricerca
-                  searchFieldProps: TextFieldProps(
-                   ),
+                  searchFieldProps: TextFieldProps(),
                 ),
                 dropdownDecoratorProps: const DropDownDecoratorProps(
                   dropdownSearchDecoration: InputDecoration(
@@ -453,7 +461,6 @@ Future<int?> _scegliMacroarea() async {
             ),
 
             const SizedBox(height: 16),
-
             // -------------------------
             // CARD: NOTE
             // -------------------------
@@ -464,20 +471,26 @@ Future<int?> _scegliMacroarea() async {
                 builder: (_, snapshot) {
                   final note = snapshot.data ?? [];
 
-                  // 🔥 Ordina alfabeticamente le note
-                  note.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+                  // Ordina alfabeticamente le note
+                  note.sort(
+                      (a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
                   return Autocomplete<String>(
                     optionsBuilder: (value) {
-                      if (value.text.isEmpty) return const Iterable<String>.empty();
+                      if (value.text.isEmpty) {
+                        return const Iterable<String>.empty();
+                      }
                       return note.where(
-                            (n) => n.toLowerCase().contains(value.text.toLowerCase()),
+                        (n) => n
+                            .toLowerCase()
+                            .contains(value.text.toLowerCase()),
                       );
                     },
                     onSelected: (val) {
                       _notaController.text = val;
                     },
-                    fieldViewBuilder: (context, controller, focusNode, _) {
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
                       controller.text = _notaController.text;
 
                       controller.addListener(() {
@@ -485,11 +498,13 @@ Future<int?> _scegliMacroarea() async {
 
                         // Se l’utente ha appena premuto spazio → normalizza la parola precedente
                         if (text.endsWith(" ")) {
-                          final formatted = normalizeSmart(text.trim()) + " ";
+                          final formatted =
+                              normalizeSmart(text.trim()) + " ";
 
                           controller.value = controller.value.copyWith(
                             text: formatted,
-                            selection: TextSelection.collapsed(offset: formatted.length),
+                            selection: TextSelection.collapsed(
+                                offset: formatted.length),
                           );
 
                           _notaController.text = formatted;
@@ -498,14 +513,15 @@ Future<int?> _scegliMacroarea() async {
                           _notaController.text = text;
                         }
                       });
+
                       focusNode.addListener(() {
                         if (!focusNode.hasFocus) {
-                          final cleaned = normalizeSmart(controller.text.trim());
+                          final cleaned =
+                              normalizeSmart(controller.text.trim());
                           controller.text = cleaned;
                           _notaController.text = cleaned;
                         }
                       });
-
 
                       return TextField(
                         controller: controller,
@@ -517,20 +533,48 @@ Future<int?> _scegliMacroarea() async {
                         ),
                       );
                     },
-
                   );
                 },
               ),
             ),
 
+            const SizedBox(height: 16),
+
+            // -------------------------
+            // CARD: ARTICOLI
+            // -------------------------
+            _buildCard(
+              title: "Articoli",
+              child: TextField(
+                controller: _articoliController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: "Es. Latte, Pane, Uova…",
+                ),
+              ),
+            ),
           ],
         ),
       ),
+      // ⭐ PULSANTE DI DEBUG OCR
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.orange,
+        child: const Icon(Icons.bug_report),
+        onPressed: () {
+          debugOCR("""
+BAR CENTRALE
+Caffe 1,20
+Totale 1,20
+""");
+        },
+      ),
     );
   }
-// ------------------------------------------------------------
-// CARD BUILDER (Material 3 Light, minimal, con highlight OCR)
-// ------------------------------------------------------------
+
+  // ------------------------------------------------------------
+  // CARD BUILDER (Material 3 Light, minimal, con highlight OCR)
+  // ------------------------------------------------------------
   Widget _buildCard({
     required String title,
     required Widget child,
@@ -563,76 +607,71 @@ Future<int?> _scegliMacroarea() async {
     );
   }
 
-// ------------------------------------------------------------
-// CAMBIO CATEGORIA
-// ------------------------------------------------------------
- void _onCategoriaChanged(String? val) async {
-  FocusScope.of(context).unfocus();
+  // ------------------------------------------------------------
+  // CAMBIO CATEGORIA
+  // ------------------------------------------------------------
+  void _onCategoriaChanged(String? val) async {
+    FocusScope.of(context).unfocus();
 
-  if (val == "__nuova__") {
-    final nuova = await _creaNuovaCategoria();
-    if (nuova != null) {
+    if (val == "__nuova__") {
+      final nuova = await _creaNuovaCategoria();
+      if (nuova != null) {
+        final idMacroarea = await _scegliMacroarea();
+        if (idMacroarea == null) return;
 
-      final idMacroarea = await _scegliMacroarea();
-      if (idMacroarea == null) return;
+        await DatabaseHelper.instance.insertCategoria(
+          tipo: _tipo,
+          nome: nuova,
+          idMacroarea: idMacroarea,
+        );
 
-      await DatabaseHelper.instance.insertCategoria(
-        tipo: _tipo,
-        nome: nuova,
-        idMacroarea: idMacroarea,
-      );
-
-      setState(() {
-        _categoria = normalizeSmart(nuova);
-        _descrizione = null;
-      });
+        setState(() {
+          _categoria = normalizeSmart(nuova);
+          _descrizione = null;
+        });
+      }
+      return;
     }
-    return;
+
+    // Ramo normale
+    setState(() {
+      _categoria = val;
+      _descrizione = null;
+    });
   }
 
-  // ⭐⭐⭐ RAMO NORMALE (mancava!)
-  setState(() {
-    _categoria = val;        // ← fondamentale
-    _descrizione = null;     // reset descrizione
-  });
-}
-
-
-// ------------------------------------------------------------
-// CAMBIO DESCRIZIONE
-// ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // CAMBIO DESCRIZIONE
+  // ------------------------------------------------------------
   void _onDescrizioneChanged(String? val) async {
-  FocusScope.of(context).unfocus();
+    FocusScope.of(context).unfocus();
 
-  if (val == "__nuova__") {
-    final nuova = await _creaNuovaDescrizione();
-    if (nuova != null) {
-      final norm = normalizeSmart(nuova);
+    if (val == "__nuova__") {
+      final nuova = await _creaNuovaDescrizione();
+      if (nuova != null) {
+        final norm = normalizeSmart(nuova);
 
-      await DatabaseHelper.instance.aggiungiDescrizione(
-        tipo: _tipo,
-        categoria: _categoria!,
-        descrizione: norm,
-      );
+        await DatabaseHelper.instance.aggiungiDescrizione(
+          tipo: _tipo,
+          categoria: _categoria!,
+          descrizione: norm,
+        );
 
-      setState(() {
-        _descrizione = norm;   // ⭐ FIX 1: normalizzazione coerente
-      });
+        setState(() {
+          _descrizione = norm;
+        });
+      }
+      return;
     }
-    return;
+
+    setState(() {
+      _descrizione = val;
+    });
   }
 
-  // ⭐ FIX 2: normalizza SEMPRE la descrizione selezionata
-  setState(() {
-    _descrizione = val;
-  });
-}
-
-
-
-// ------------------------------------------------------------
-// CAMBIO PUNTO VENDITA
-// ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // CAMBIO PUNTO VENDITA
+  // ------------------------------------------------------------
   void _onPuntoVenditaChanged(String? value) async {
     FocusScope.of(context).unfocus();
 
@@ -642,7 +681,8 @@ Future<int?> _scegliMacroarea() async {
         await DatabaseHelper.instance.insertPuntoVendita(nuovo);
         setState(() {
           _listaPuntiVendita.add(nuovo);
-          _listaPuntiVendita.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+          _listaPuntiVendita.sort(
+              (a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
           _puntoVenditaController.text = normalizeSmart(nuovo);
         });
       }
@@ -654,10 +694,9 @@ Future<int?> _scegliMacroarea() async {
     });
   }
 
-
-// ------------------------------------------------------------
-// CAMBIO METODO PAGAMENTO
-// ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // CAMBIO METODO PAGAMENTO
+  // ------------------------------------------------------------
   void _onMetodoPagamentoChanged(String? value) async {
     FocusScope.of(context).unfocus();
 
@@ -673,10 +712,9 @@ Future<int?> _scegliMacroarea() async {
     setState(() => _metodoPagamento = normalizeSmart(value ?? ""));
   }
 
-
-// ------------------------------------------------------------
-// POPUP: NUOVA CATEGORIA
-// ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // POPUP: NUOVA CATEGORIA
+  // ------------------------------------------------------------
   Future<String?> _creaNuovaCategoria() async {
     String temp = "";
     final controller = TextEditingController();
@@ -697,14 +735,14 @@ Future<int?> _scegliMacroarea() async {
                 final formatted = normalizeSmart(v.trim()) + " ";
                 controller.value = controller.value.copyWith(
                   text: formatted,
-                  selection: TextSelection.collapsed(offset: formatted.length),
+                  selection:
+                      TextSelection.collapsed(offset: formatted.length),
                 );
                 temp = formatted;
               } else {
                 temp = v;
               }
-            }
-
+            },
           ),
           actions: [
             TextButton(
@@ -728,10 +766,9 @@ Future<int?> _scegliMacroarea() async {
     );
   }
 
-
-// ------------------------------------------------------------
-// POPUP: NUOVA DESCRIZIONE
-// ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // POPUP: NUOVA DESCRIZIONE
+  // ------------------------------------------------------------
   Future<String?> _creaNuovaDescrizione() async {
     String temp = "";
     final controller = TextEditingController();
@@ -752,14 +789,14 @@ Future<int?> _scegliMacroarea() async {
                 final formatted = normalizeSmart(v.trim()) + " ";
                 controller.value = controller.value.copyWith(
                   text: formatted,
-                  selection: TextSelection.collapsed(offset: formatted.length),
+                  selection:
+                      TextSelection.collapsed(offset: formatted.length),
                 );
                 temp = formatted;
               } else {
                 temp = v;
               }
-            }
-
+            },
           ),
           actions: [
             TextButton(
@@ -783,12 +820,9 @@ Future<int?> _scegliMacroarea() async {
     );
   }
 
-
-
-
-// ------------------------------------------------------------
-// POPUP: NUOVO PUNTO VENDITA
-// ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // POPUP: NUOVO PUNTO VENDITA
+  // ------------------------------------------------------------
   Future<String?> _creaNuovoPuntoVendita() async {
     String temp = "";
     final controller = TextEditingController();
@@ -809,14 +843,14 @@ Future<int?> _scegliMacroarea() async {
                 final formatted = normalizeSmart(v.trim()) + " ";
                 controller.value = controller.value.copyWith(
                   text: formatted,
-                  selection: TextSelection.collapsed(offset: formatted.length),
+                  selection:
+                      TextSelection.collapsed(offset: formatted.length),
                 );
                 temp = formatted;
               } else {
                 temp = v;
               }
-            }
-
+            },
           ),
           actions: [
             TextButton(
@@ -840,10 +874,9 @@ Future<int?> _scegliMacroarea() async {
     );
   }
 
-
-// ------------------------------------------------------------
-// POPUP: NUOVO METODO PAGAMENTO
-// ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // POPUP: NUOVO METODO PAGAMENTO
+  // ------------------------------------------------------------
   Future<String?> _creaNuovoMetodoPagamento() async {
     String temp = "";
     final controller = TextEditingController();
@@ -864,14 +897,15 @@ Future<int?> _scegliMacroarea() async {
                 final formatted = normalizeSmart(v.trim()) + " ";
                 controller.value = controller.value.copyWith(
                   text: formatted,
-                  selection: TextSelection.collapsed(offset: formatted.length),
+                  selection:
+                      TextSelection.collapsed(offset: formatted.length),
                 );
                 temp = formatted;
               } else {
                 temp = v;
               }
-            }
-            ),
+            },
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -894,55 +928,54 @@ Future<int?> _scegliMacroarea() async {
     );
   }
 
-
-// ------------------------------------------------------------
-// SALVATAGGIO
-// ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // SALVATAGGIO
+  // ------------------------------------------------------------
   void _salva() {
-  final importo =
-      double.tryParse(_importoController.text.replaceAll(',', '.'));
+    final importo =
+        double.tryParse(_importoController.text.replaceAll(',', '.'));
 
-  if (_categoria == null ||
-      _descrizione == null ||
-      importo == null ||
-      importo <= 0) {
-    print("DEBUG UI: campi obbligatori mancanti");
-    return;
+    if (_categoria == null ||
+        _descrizione == null ||
+        importo == null ||
+        importo <= 0) {
+      print("DEBUG UI: campi obbligatori mancanti");
+      return;
+    }
+
+    // Normalizzazione finale
+    _categoria = _categoria;
+    _descrizione = normalizeSmart(_descrizione ?? "");
+    _metodoPagamento = normalizeSmart(_metodoPagamento ?? "");
+    _puntoVenditaController.text =
+        normalizeSmart(_puntoVenditaController.text);
+
+    print("DEBUG UI: creo Movimento");
+
+    final movimento = Movimento(
+      id: widget.movimentoDaModificare?.id,
+      tipo: _tipo,
+      data: _data,
+      categoria: _categoria!,
+      descrizione: _descrizione!,
+      importo: importo,
+      puntoVendita: _puntoVenditaController.text,
+      metodoPagamento: _metodoPagamento ?? "",
+      nota: _notaController.text,
+      articoli: _articoliController.text,
+      origine: OrigineDati.manuale,
+      searchCategoria: normalizeSearch(_categoria!),
+      searchDescrizione: normalizeSearch(_descrizione!),
+      searchPuntoVendita: normalizeSearch(_puntoVenditaController.text),
+      searchMetodoPagamento: normalizeSearch(_metodoPagamento ?? ""),
+      dataCreazione: DateTime.now(),
+      idMacroarea: null, // lo calcola insertMovimento()
+    );
+
+    print("DEBUG UI: movimento creato → Navigator.pop");
+
+    Navigator.pop(context, movimento);
   }
-
-  // Normalizzazione finale
-  _categoria = _categoria;
-  _descrizione = normalizeSmart(_descrizione ?? "");
-  _metodoPagamento = normalizeSmart(_metodoPagamento ?? "");
-  _puntoVenditaController.text = normalizeSmart(_puntoVenditaController.text);
-
-  print("DEBUG UI: creo Movimento");
-
-  final movimento = Movimento(
-    id: widget.movimentoDaModificare?.id,
-    tipo: _tipo,
-    data: _data,
-    categoria: _categoria!,
-    descrizione: _descrizione!,
-    importo: importo,
-    puntoVendita: _puntoVenditaController.text,
-    metodoPagamento: _metodoPagamento ?? "",
-    nota: _notaController.text,
-    origine: OrigineDati.manuale,
-    searchCategoria: normalizeSearch(_categoria!),
-    searchDescrizione: normalizeSearch(_descrizione!),
-    searchPuntoVendita: normalizeSearch(_puntoVenditaController.text),
-    searchMetodoPagamento: normalizeSearch(_metodoPagamento ?? ""),
-    dataCreazione: DateTime.now(),
-    idMacroarea: null, // lo calcola insertMovimento()
-  );
-
-  print("DEBUG UI: movimento creato → Navigator.pop");
-
-  Navigator.pop(context, movimento);
-}
-
-
 
   // ------------------------------------------------------------
   // FUNZIONE DI PULIZIA NOTA
@@ -961,6 +994,4 @@ Future<int?> _scegliMacroarea() async {
 
     return cleaned.isEmpty ? null : cleaned;
   }
-
- }
-
+}

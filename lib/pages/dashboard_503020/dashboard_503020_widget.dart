@@ -282,39 +282,14 @@ class AndamentoSpeseSection extends StatelessWidget {
                         Expanded(
                           child: ClipRRect(
   borderRadius: BorderRadius.circular(8),
-  child: Stack(
-    children: [
-      // SFONDO GRADIENT (riempito al 100%)
-      Container(
-        height: 10,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              _colorFor(ratio.toDouble()).withOpacity(0.4), // più chiaro
-              _colorFor(ratio.toDouble()),                  // più intenso
-            ],
-          ),
-        ),
-      ),
-
-      // MASCHERA PER MOSTRARE SOLO LA PARTE "RIEMPITA"
-      FractionallySizedBox(
-        widthFactor: ratio.clamp(0, 1.2).toDouble(),
-        child: Container(
-          height: 10,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                _colorFor(ratio.toDouble()).withOpacity(0.4),
-                _colorFor(ratio.toDouble()),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ],
+  child: LinearProgressIndicator(
+    minHeight: 10,
+    value: ratio.clamp(0, 1.2).toDouble(),
+    color: _colorFor(ratio.toDouble()),
+    backgroundColor: Colors.grey.shade300,
   ),
 ),
+
 
 
 

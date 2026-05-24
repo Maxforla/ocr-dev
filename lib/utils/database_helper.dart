@@ -123,7 +123,7 @@ String formatEuro(double value) {
 
   final db = await openDatabase(
     path,
-    version: 12,
+    version: 13,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
   );
@@ -248,6 +248,10 @@ await db.execute('''
       WHERE typeof(data) = 'integer';
     ''');
   }
+// PATCH A — aggiunta colonna articoli
+if (oldVersion < 13) {
+  await db.execute("ALTER TABLE movimenti ADD COLUMN articoli TEXT;");
+}
 }
 
 
@@ -757,8 +761,12 @@ Future<void> insertCategoria({
 // map['descrizione'] = normalizeSmart(map['descrizione'] ?? "");
 map['puntoVendita'] = normalizeSmart(map['puntoVendita'] ?? "");
 map['metodoPagamento'] = normalizeSmart(map['metodoPagamento'] ?? "");
-map['nota'] = normalizeSmart(map['nota'] ?? "");
-
+// NOTA: se l'utente ha scritto una nota → usa quella
+// altrimenti → usa notaArticoli (che arriva in m.nota)
+map['nota'] = m.nota != null && m.nota!.trim().isNotEmpty
+    ? normalizeSmart(m.nota!)
+    : "";
+map['articoli'] = m.articoli ?? "";
   map['origine'] = m.origine.name;
 
   map['importo'] = m.importo;
@@ -812,6 +820,7 @@ print('DEBUG DB: sto per fare db.insert movimenti con map: $map');
     map['puntoVendita'] = normalizeSmart(map['puntoVendita'] ?? "");
     map['metodoPagamento'] = normalizeSmart(map['metodoPagamento'] ?? "");
     map['nota'] = normalizeSmart(map['nota'] ?? "");
+    map['articoli'] = m.articoli ?? "";
     map['origine'] = normalizeSmart(map['origine'] ?? "");
 
     map['importo'] = m.importo;

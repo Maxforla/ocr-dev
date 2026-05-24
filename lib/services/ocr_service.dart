@@ -1,96 +1,154 @@
+// ocr_service.dart — VERSIONE OTTIMIZZATA (720px + upscale ridotto + Tesseract solo fallback)
+
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image/image.dart' as img;
 import 'package:tesseract_ocr/tesseract_ocr.dart';
 
 class OcrService {
   final ImagePicker _picker = ImagePicker();
 
   Future<File?> takePhoto() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
-    if (image == null) return null;
-    return File(image.path);
-  }
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.camera);
 
-  Future<File?> pickFromGallery() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return null;
-    return File(image.path);
+      if (image == null) {
+        debugPrint('📸 FOTO: annullata');
+        return null;
+      }
+
+      return File(image.path);
+    } catch (e) {
+      debugPrint('📸 CAMERA ERROR: $e');
+      return null;
+    }
   }
 
   Future<String> extractText(File imageFile) async {
     try {
-      if (!await imageFile.exists()) {
-        throw Exception("File immagine non trovato");
-      }
+      debugPrint('🔍 OCR START (compute isolate)');
 
-      final length = await imageFile.length();
-      if (length == 0) {
-        throw Exception("File immagine vuoto");
-      }
+      final RootIsolateToken token = RootIsolateToken.instance!;
 
-      // 1) PRIMO TENTATIVO: MLKit
-      final textRecognizer = TextRecognizer();
-      final inputImage = InputImage.fromFile(imageFile);
-      final RecognizedText recognizedText =
-          await textRecognizer.processImage(inputImage);
-         print("=== OCR RAW TEXT ===");
-         print(recognizedText.text);
- 
-      await textRecognizer.close();
+      final result = await compute(_performOcrInIsolate, {
+        'path': imageFile.path,
+        'token': token,
+      });
 
-      String raw = recognizedText.text.trim();
+      debugPrint('🧾 TESTO OCR GREZZO (RITORNO ISOLATE):\n$result');
 
-      // 2) Se MLKit ha trovato qualcosa, lo usiamo
-      if (raw.isNotEmpty) {
-        return _postProcessText(raw);
-      }
-
-      // 3) FALLBACK: Tesseract
-debugPrint("MLKit vuoto, passo a Tesseract...");
-
-final tessText = await TesseractOcr.extractText(imageFile.path);
-
-final cleaned = tessText.trim();
-
-debugPrint("TESSERACT OCR RAW:\n$cleaned");
-
-if (cleaned.isEmpty) {
-  debugPrint("Tesseract vuoto");
-  return "";
-}
-
-      return _postProcessText(cleaned);
+      return result;
     } catch (e) {
-      debugPrint("ERRORE OCR: $e");
-      return "";
+      debugPrint('❌ OCR ERROR: $e');
+      return '';
     }
   }
+}
 
-  /// Piccolo post-processing del testo grezzo
-  String _postProcessText(String text) {
-    var t = text;
+Future<String> _performOcrInIsolate(Map args) async {
+  try {
+    debugPrint('🧪 ISOLATE: avviato');
 
-    // Normalizza fine riga
-    t = t.replaceAll('\r\n', '\n');
+    final String imagePath = args['path'];
+    final RootIsolateToken token = args['token'];
 
-    // Correzioni caratteri tipici OCR
-    t = t.replaceAll('O', '0'); // O maiuscola → zero
-    t = t.replaceAll('o ', '0 '); // o seguita da spazio in contesto numerico
-    t = t.replaceAll('I', '1'); // I maiuscola → 1 in contesti numerici
+    BackgroundIsolateBinaryMessenger.ensureInitialized(token);
 
-    // Rimuovi righe completamente vuote multiple
-    final righe = t.split('\n');
-    final pulite = <String>[];
-    for (final r in righe) {
-      final trimmed = r.trimRight();
-      if (trimmed.isEmpty && pulite.isNotEmpty && pulite.last.isEmpty) {
-        continue;
-      }
-      pulite.add(trimmed);
+    final file = File(imagePath);
+    final bytes = await file.readAsBytes();
+    img.Image? image = img.decodeImage(bytes);
+
+    if (image == null) {
+      debugPrint('❌ ISOLATE: decode fallita');
+      return '';
     }
 
-    return pulite.join('\n').trim();
+    debugPrint('📏 DIMENSIONI ORIGINALI: ${image.width} x ${image.height}');
+
+    // -------------------------------------------------------------
+    // RIDUZIONE A 720 PX (velocità molto maggiore)
+    // -------------------------------------------------------------
+    const targetWidth = 720;
+    final scale = targetWidth / image.width;
+
+    final resized = img.copyResize(
+      image,
+      width: targetWidth,
+      height: (image.height * scale).round(),
+      interpolation: img.Interpolation.linear,
+    );
+
+    debugPrint('📏 RIDOTTA A: ${resized.width} x ${resized.height}');
+
+    // -------------------------------------------------------------
+    // UPSCALE RIDOTTO (1.2× invece di 1.5×)
+    // -------------------------------------------------------------
+    final upscaled = img.copyResize(
+      resized,
+      width: (resized.width * 1.2).round(),
+      height: (resized.height * 1.2).round(),
+      interpolation: img.Interpolation.linear,
+    );
+
+    debugPrint('📏 UPSCALE A: ${upscaled.width} x ${upscaled.height}');
+
+    final upscaledBytes = Uint8List.fromList(
+      img.encodeJpg(upscaled, quality: 95),
+    );
+
+    final upscaledPath = imagePath.replaceAll('.jpg', '_final.jpg');
+    final upscaledFile = File(upscaledPath)..writeAsBytesSync(upscaledBytes);
+
+    // -------------------------------------------------------------
+    // MLKIT (PRIORITARIO)
+    // -------------------------------------------------------------
+    try {
+      debugPrint('🔍 MLKIT: start');
+
+      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      final inputImage = InputImage.fromFile(upscaledFile);
+      final recognizedText = await textRecognizer.processImage(inputImage);
+      await textRecognizer.close();
+
+      final buffer = StringBuffer();
+      for (final block in recognizedText.blocks) {
+        for (final line in block.lines) {
+          buffer.writeln(line.text);
+        }
+      }
+
+      final mlkitResult = buffer.toString().trim();
+      debugPrint('🔍 MLKIT RISULTATO:\n$mlkitResult');
+
+      // Se MLKit trova qualcosa → STOP, niente Tesseract
+      if (mlkitResult.isNotEmpty) return mlkitResult;
+    } catch (e) {
+      debugPrint('❌ MLKIT ERROR: $e');
+    }
+
+    // -------------------------------------------------------------
+    // TESSERACT (SOLO SE MLKIT FALLISCE)
+    // -------------------------------------------------------------
+    try {
+      debugPrint('🔍 TESSERACT: start');
+
+      final tess = await TesseractOcr.extractText(upscaledFile.path);
+      final cleaned = tess.trim();
+
+      debugPrint('🔍 TESSERACT RISULTATO:\n$cleaned');
+
+      if (cleaned.isNotEmpty) return cleaned;
+    } catch (e) {
+      debugPrint('❌ TESSERACT ERROR: $e');
+    }
+
+    return '';
+  } catch (e) {
+    debugPrint('❌ ISOLATE FATAL ERROR: $e');
+    return '';
   }
 }

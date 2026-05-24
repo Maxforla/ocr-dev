@@ -11,6 +11,7 @@ class Movimento {
   final String puntoVendita;
   final String metodoPagamento;
   final String? nota;
+  final String? articoli;
   final OrigineDati origine;
 
   final String searchCategoria;
@@ -23,23 +24,25 @@ class Movimento {
   final int? idMacroarea; // opzionale, lo calcola il DB
 
   Movimento({
-    this.id,
-    required this.tipo,
-    required this.data,
-    required this.categoria,
-    required this.descrizione,
-    required this.importo,
-    required this.puntoVendita,
-    required this.metodoPagamento,
-    this.nota,
-    required this.origine,
-    this.searchCategoria = "",
-    this.searchDescrizione = "",
-    this.searchPuntoVendita = "",
-    this.searchMetodoPagamento = "",
-    required this.dataCreazione,
-    this.idMacroarea,
-  });
+  this.id,
+  required this.tipo,
+  required this.data,
+  required this.categoria,
+  required this.descrizione,
+  required this.importo,
+  required this.puntoVendita,
+  required this.metodoPagamento,
+  this.nota,
+  this.articoli,   // ⭐ aggiunto qui
+  required this.origine,
+  this.searchCategoria = "",
+  this.searchDescrizione = "",
+  this.searchPuntoVendita = "",
+  this.searchMetodoPagamento = "",
+  required this.dataCreazione,
+  this.idMacroarea,
+});
+
 
   factory Movimento.fromMap(Map<String, dynamic> map) {
     return Movimento(
@@ -52,6 +55,7 @@ class Movimento {
       puntoVendita: map['puntoVendita'] ?? "",
       metodoPagamento: map['metodoPagamento'] ?? "",
       nota: map['nota'],
+      articoli: map['articoli'],   // ⭐ aggiunto qui
       origine: OrigineDati.values.firstWhere(
         (e) => e.name == (map['origine'] ?? 'manuale'),
         orElse: () => OrigineDati.manuale,
@@ -90,23 +94,25 @@ class Movimento {
   }
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'tipo': tipo.name,
-      'data': data.toIso8601String(),
-      'categoria': categoria,
-      'descrizione': descrizione,
-      'importo': importo,
-      'puntoVendita': puntoVendita,
-      'metodoPagamento': metodoPagamento,
-      'nota': nota,
-      'origine': origine.name,
-      'searchCategoria': searchCategoria,
-      'searchDescrizione': searchDescrizione,
-      'searchPuntoVendita': searchPuntoVendita,
-      'searchMetodoPagamento': searchMetodoPagamento,
-      'dataCreazione': dataCreazione.toIso8601String(),
-      // idMacroarea NON viene messo qui → lo calcola insertMovimento()
-    };
-  }
+  return {
+    'id': id,
+    'tipo': tipo.name,
+    'data': data.toIso8601String(),
+    'categoria': categoria,
+    'descrizione': descrizione,
+    'importo': importo,
+    'puntoVendita': puntoVendita,
+    'metodoPagamento': metodoPagamento,
+    'nota': nota,
+    'articoli': articoli,   // ⭐ nuovo campo
+    'origine': origine.name,
+    'searchCategoria': searchCategoria,
+    'searchDescrizione': searchDescrizione,
+    'searchPuntoVendita': searchPuntoVendita,
+    'searchMetodoPagamento': searchMetodoPagamento,
+    'dataCreazione': dataCreazione.toIso8601String(),
+    // idMacroarea NON viene messo qui → lo calcola insertMovimento()
+  };
+}
+
 }

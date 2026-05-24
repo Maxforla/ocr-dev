@@ -116,24 +116,22 @@ void _onSearchChanged(String value) {
       // 3) Parsing intelligente
       final parsed = await parser.parse(rawText);
 
-      print("IMPORTO TROVATO: ${parsed.importo}");
-      print("DATA TROVATA: ${parsed.data}");
       print("PUNTO VENDITA: ${parsed.puntoVendita}");
       print("CATEGORIA: ${parsed.categoria}");
       print("DESCRIZIONE: ${parsed.descrizione}");
       print("METODO PAGAMENTO: ${parsed.metodoPagamento}");
 
       // 4) Nota OCR pulita
-      final notaPulita = parser.pulisciNotaOCR(rawText);
+      final notaPulita = normalizeSmart(rawText);
 
       // 5) Movimento precompilato
       final nuovoMovimento = Movimento(
         id: null,
         tipo: MovimentoTipo.uscita,
-        data: parsed.data ?? DateTime.now(),
+        data: DateTime.now(),   // il parser non estrae date
         categoria: parsed.categoria ?? "Da scontrino",
         descrizione: parsed.descrizione ?? "Spesa rilevata da OCR",
-        importo: parsed.importo ?? 0.0,
+        importo: 0.0,           // l’importo lo calcoli tu dopo
         puntoVendita: parsed.puntoVendita ?? "",
         metodoPagamento: parsed.metodoPagamento ?? "",
         nota: notaPulita,
@@ -149,8 +147,6 @@ void _onSearchChanged(String value) {
       // 6) Vai alla pagina di dettaglio per conferma
       // 6) Logica intelligente: salvo subito se il movimento è completo
       bool completo =
-          (parsed.importo != null) &&
-              (parsed.data != null) &&
               (parsed.categoria != null) &&
               (parsed.descrizione != null);
 
